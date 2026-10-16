@@ -1,0 +1,27 @@
+=== Content Pipeline Hub ===
+Contributors: debashishghadei
+Tags: private, notes, content, workflow
+Requires at least: 6.8
+Tested up to: 7.1
+Requires PHP: 8.1
+Stable tag: 0.1.0
+License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
+
+Private content hub: capture ideas and turn them into articles for your sites.
+
+== Description ==
+
+Install on a separate, private WordPress site (the "hub").
+
+* The whole site is private: logged-out visitors only see the login screen.
+* REST API, feeds, sitemaps, author pages, comments, XML-RPC and sign-ups are blocked.
+* Search engines are told not to index anything.
+* After login you land on the notes app (/notes/).
+
+Version 0.1 is the locked-down shell. Notes arrive in 0.2.
+
+== Changelog ==
+
+= 0.1.0 =
+* Lockdown, notes app shell, status page.

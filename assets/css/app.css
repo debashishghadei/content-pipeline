@@ -1,0 +1,134 @@
+/* Content Pipeline Hub — notes app shell */
+:root {
+	--cp-bg: #f5f6f8;
+	--cp-surface: #ffffff;
+	--cp-ink: #111418;
+	--cp-muted: #5b6370;
+	--cp-line: #e2e5ea;
+	--cp-accent: #c8102e;
+	--cp-radius: 14px;
+	color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--cp-bg: #0e1013;
+		--cp-surface: #171a1f;
+		--cp-ink: #eef0f3;
+		--cp-muted: #9aa3b0;
+		--cp-line: #2a2f37;
+		--cp-accent: #ff4d63;
+	}
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	background: var(--cp-bg);
+	color: var(--cp-ink);
+	font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	-webkit-text-size-adjust: 100%;
+}
+
+a {
+	color: inherit;
+}
+
+.cp-bar {
+	position: sticky;
+	top: 0;
+	z-index: 10;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+	background: var(--cp-surface);
+	border-bottom: 1px solid var(--cp-line);
+}
+
+.cp-bar__title {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.cp-bar__name {
+	font-size: 1.15rem;
+	font-weight: 700;
+}
+
+.cp-bar__site {
+	color: var(--cp-muted);
+	font-size: 0.8rem;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.cp-bar__links {
+	display: flex;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+.cp-bar__links a {
+	padding: 8px 10px;
+	border-radius: 999px;
+	font-size: 0.9rem;
+	text-decoration: none;
+}
+
+.cp-bar__links a:hover,
+.cp-bar__links a:focus-visible {
+	background: var(--cp-bg);
+}
+
+.cp-main {
+	max-width: 720px;
+	margin: 0 auto;
+	padding: 20px 16px 40px;
+}
+
+.cp-card {
+	padding: 20px;
+	background: var(--cp-surface);
+	border: 1px solid var(--cp-line);
+	border-radius: var(--cp-radius);
+}
+
+.cp-card__eyebrow {
+	margin: 0 0 6px;
+	color: var(--cp-accent);
+	font-size: 0.75rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.cp-card__title {
+	margin: 0 0 10px;
+	font-size: 1.35rem;
+	line-height: 1.3;
+}
+
+.cp-card p {
+	margin: 0 0 10px;
+}
+
+.cp-card__muted {
+	color: var(--cp-muted);
+}
+
+.cp-foot {
+	padding: 0 16px 24px;
+	color: var(--cp-muted);
+	font-size: 0.8rem;
+	text-align: center;
+}
