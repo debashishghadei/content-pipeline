@@ -104,7 +104,7 @@ login admin admin "$BASE/hello-world/"
 login admin admin
 A="curl -4 -s -o $TMP/body -D $TMP/head -b $JAR"
 $A "$BASE/"; [ "$(code)" = "302" ] && [ "$(loc)" = "$BASE/notes/" ] && ok "home → /notes/" || bad "home → /notes/" "$(code) $(loc)"
-$A "$BASE/notes/"; expect_code "GET /notes/" 200; expect_body "app page content" "your hub is locked and ready"; expect_body "app stylesheet" "assets/css/app.css?ver="; expect_body "app has no theme head" "cp-app"
+$A "$BASE/notes/"; expect_code "GET /notes/" 200; expect_body "app page content" "id=\"cp-root\""; expect_body "app stylesheet" "assets/css/app.css?ver="; expect_body "app has no theme head" "cp-app"
 echo "$(hdr X-Robots-Tag)" | grep -q noindex && ok "X-Robots-Tag on app" || bad "X-Robots-Tag on app" "missing"
 echo "$(hdr Cache-Control)" | grep -q 'no-store\|no-cache' && ok "app not cached" || bad "app not cached" "$(hdr Cache-Control)"
 $A "$BASE/?cp_app=1"; expect_code "GET /?cp_app=1" 200

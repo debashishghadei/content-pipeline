@@ -20,6 +20,11 @@ final class App {
 	public const QUERY_VAR = 'cp_app';
 
 	/**
+	 * Query variable for the web app manifest ("Add to home screen").
+	 */
+	public const MANIFEST_VAR = 'cp_manifest';
+
+	/**
 	 * URL path of the app (pretty permalinks).
 	 */
 	public const SLUG = 'notes';
@@ -42,13 +47,14 @@ final class App {
 	}
 
 	/**
-	 * Register the query variable.
+	 * Register the query variables.
 	 *
 	 * @param string[] $vars Public query variables.
 	 * @return string[]
 	 */
 	public static function query_vars( $vars ) {
 		$vars[] = self::QUERY_VAR;
+		$vars[] = self::MANIFEST_VAR;
 		return $vars;
 	}
 
@@ -63,11 +69,16 @@ final class App {
 	}
 
 	/**
-	 * Show the app, or send the home page to it.
+	 * Show the app or the manifest, or send the home page to the app.
 	 */
 	public static function route(): void {
 		if ( ! Plugin::current_user_can_use() ) {
 			return;
+		}
+
+		if ( get_query_var( self::MANIFEST_VAR ) ) {
+			self::manifest();
+			exit;
 		}
 
 		if ( get_query_var( self::QUERY_VAR ) ) {
@@ -82,6 +93,54 @@ final class App {
 	}
 
 	/**
+	 * Web app manifest, so Chrome on Android can install the app on the home screen.
+	 * The page links it with crossorigin="use-credentials", so the login cookie is sent.
+	 */
+	private static function manifest(): void {
+		$icons = CONTENT_PIPELINE_URL . 'assets/icons/';
+		$data  = array(
+			'name'             => sprintf( '%s · %s', __( 'Notes', 'content-pipeline' ), get_bloginfo( 'name' ) ),
+			'short_name'       => __( 'Notes', 'content-pipeline' ),
+			'id'               => self::url(),
+			'start_url'        => self::url(),
+			'scope'            => home_url( '/' ),
+			'display'          => 'standalone',
+			'background_color' => '#f5f6f8',
+			'theme_color'      => '#c8102e',
+			'icons'            => array(
+				array(
+					'src'   => $icons . 'icon-192.png',
+					'sizes' => '192x192',
+					'type'  => 'image/png',
+				),
+				array(
+					'src'   => $icons . 'icon-512.png',
+					'sizes' => '512x512',
+					'type'  => 'image/png',
+				),
+				array(
+					'src'     => $icons . 'icon-maskable-512.png',
+					'sizes'   => '512x512',
+					'type'    => 'image/png',
+					'purpose' => 'maskable',
+				),
+			),
+		);
+
+		nocache_headers();
+		status_header( 200 );
+		header( 'Content-Type: application/manifest+json; charset=utf-8' );
+		echo wp_json_encode( $data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+	}
+
+	/**
+	 * Address of the manifest.
+	 */
+	public static function manifest_url(): string {
+		return add_query_arg( self::MANIFEST_VAR, '1', home_url( '/' ) );
+	}
+
+	/**
 	 * Output the app page. It does not use the theme.
 	 */
 	private static function render(): void {
@@ -89,15 +148,40 @@ final class App {
 		status_header( 200 );
 		header( 'Content-Type: text/html; charset=' . get_option( 'blog_charset' ) );
 
+		$user = wp_get_current_user();
+
+		$config = array(
+			'rest'        => esc_url_raw( rest_url( Api::NS . '/' ) ),
+			'nonce'       => wp_create_nonce( 'wp_rest' ),
+			'nonceUrl'    => admin_url( 'admin-ajax.php?action=rest-nonce' ),
+			'loginUrl'    => wp_login_url( self::url() ),
+			'adminUrl'    => admin_url(),
+			'logoutUrl'   => wp_logout_url( self::url() ),
+			'ollamaUrl'   => admin_url( 'admin.php?page=' . Ollama::PAGE ),
+			'statusUrl'   => admin_url( 'admin.php?page=' . Admin::PAGE ),
+			'siteName'    => get_bloginfo( 'name' ),
+			'userName'    => $user->display_name,
+			'storageKey'  => 'cp-pending-' . md5( home_url() . '|' . $user->ID ),
+			'version'     => CONTENT_PIPELINE_VERSION,
+			'maxUpload'   => min( Files::MAX_BYTES, (int) wp_max_upload_size() ),
+			'filesPublic' => ! Files::is_outside_public(),
+			'state'       => array(
+				'folders'  => Notes::folders(),
+				'notes'    => Notes::all(),
+				'inbox'    => Notes::inbox_id(),
+				'statuses' => Notes::statuses(),
+			),
+		);
+
 		$data = array(
-			'site_name'  => get_bloginfo( 'name' ),
-			'user_name'  => wp_get_current_user()->display_name,
-			'admin_url'  => admin_url(),
-			'logout_url' => wp_logout_url( self::url() ),
-			'version'    => CONTENT_PIPELINE_VERSION,
+			'site_name'    => get_bloginfo( 'name' ),
+			'config'       => $config,
+			'manifest_url' => self::manifest_url(),
+			'icons_url'    => CONTENT_PIPELINE_URL . 'assets/icons/',
 		);
 
 		wp_register_style( 'content-pipeline-app', CONTENT_PIPELINE_URL . 'assets/css/app.css', array(), CONTENT_PIPELINE_VERSION );
+		wp_register_script( 'content-pipeline-app', CONTENT_PIPELINE_URL . 'assets/js/app.js', array(), CONTENT_PIPELINE_VERSION, true );
 
 		require CONTENT_PIPELINE_DIR . 'templates/app.php';
 	}

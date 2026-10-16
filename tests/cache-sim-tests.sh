@@ -29,7 +29,7 @@ curl -4 -s -o /dev/null -c "$JAR" "$P/wp-login.php"
 curl -4 -s -o /dev/null -b "$JAR" -c "$JAR" --data 'log=admin&pwd=admin&testcookie=1' "$P/wp-login.php"
 for path in /notes/ '/?feed=rss2' /; do curl -4 -s -o /dev/null -b "$JAR" "$P$path"; done
 code=$(curl -4 -s -o "$TMP/b" -w '%{http_code}' "$P/notes/")
-[ "$code" = "200" ] && grep -q 'your hub is locked' "$TMP/b" && ok "simulation works: ordinary visitor gets the cached private page" || bad "simulation works" "$code"
+[ "$code" = "200" ] && grep -q 'id="cp-root"' "$TMP/b" && ok "simulation works: ordinary visitor gets the cached private page" || bad "simulation works" "$code"
 code=$(curl -4 -s -o /dev/null -w '%{http_code}' -H 'Cache-Control: no-cache' "$P/notes/")
 [ "$code" = "302" ] && ok "simulation works: no-cache request bypasses the cache (302)" || bad "simulation bypass" "$code"
 

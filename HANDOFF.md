@@ -3,26 +3,43 @@
 Read this first when starting a new chat (Claude or ChatGPT). Update it at the end of every chat/milestone.
 
 ## Current state (16 Oct 2026)
-- Version: **0.1.2** (milestone 0.1 lockdown + two rounds of ChatGPT review fixes) — done, tested, not yet installed on the real hub. ChatGPT recommends continuing from this plugin (its own parallel 0.1.0 build is dropped).
-- 0.1.1 fixed ChatGPT's review of 0.1.0: Editor/Subscriber could open wp-admin and logged-in admin-ajax (confirmed, fixed, D11); status page now separates "Protection enabled" from a real "Live check" (D12).
-- 0.1.2 fixed ChatGPT's review of 0.1.1: the Live check used a cache-bypass header and could miss a cache serving private pages (confirmed with a simulated cache, fixed, D13). Test scripts now need `CP_TEST_DISPOSABLE=1` and keep other application passwords.
-- Tests (run with `CP_TEST_DISPOSABLE=1`, disposable test sites only): `tests/lockdown-tests.sh` 194/194 and `tests/cache-sim-tests.sh` 6/6 pass on PHP 8.4.26 and 8.3.6 (WordPress 7.1.3, SQLite), run against the extracted release zip. WPCS clean. Plugin Check: only the intentional `Update URI` item.
-- Full plan: project note "content-pipeline.md" (Claude project "Tools"); decisions in `DECISIONS.md`.
+- Version: **0.2.0** — the private hub (lockdown, 0.1.x) plus the notes app (Phase 1 except Google Keep import). Built and tested in the sandbox; not yet installed on the real hub.
+- Review history: ChatGPT reviewed 0.1.0 (2 points, both confirmed and fixed in 0.1.1) and 0.1.1 (live check could miss a cache; confirmed, fixed in 0.1.2). ChatGPT recommends continuing with this plugin only.
+- Full plan: project note "content-pipeline.md" (Claude project "Tools"); decisions in `DECISIONS.md` (D1–D22).
+
+## What the app does (0.2.0)
+- Notes with title, text, checklist, pin, status (Idea → Outline ready → Draft ready → Ready → Published), images.
+- Folders like Windows Explorer (D14): Inbox + 4 website folders seeded (D15); nested folders; tree, tiles, breadcrumb; move by menu or drag and drop.
+- Search (all folders or current folder), status filter, trash (30 days), history (D17), conflict copies (D18).
+- Offline-safe saving via localStorage queue (D19); nonce renewal; logged-out banner.
+- Protected images (`Files`), Ollama test page (`Ollama`).
 
 ## Files
 - `content-pipeline.php` — header, constants, loads classes.
-- `includes/class-plugin.php` — capability `cp_use_hub`, activation, rewrite-rule rebuild after manual update.
+- `includes/class-plugin.php` — capability `cp_use_hub`, activation (registers + seeds), rewrite-rule rebuild after manual update.
 - `includes/class-lockdown.php` — all privacy rules, login redirect, Remember me.
-- `includes/class-app.php` — `/notes/` route and render; home → notes.
-- `includes/class-admin.php` — status page (Live check / Protection enabled / Setup), admin bar "Notes", plugin links.
-- `includes/class-self-test.php` — Live check: loopback requests as a logged-out visitor, result in option `content_pipeline_self_test`.
-- `templates/app.php`, `assets/css/app.css` — app shell.
-- `bin/build.sh` — builds `dist/content-pipeline-X.Y.Z.zip` with `git archive` (tests/, bin/, docs excluded via .gitattributes).
+- `includes/class-notes.php` — post type `cp_note`, taxonomy `cp_folder`, seeding, folder rules, text cleaning, history helpers.
+- `includes/class-api.php` — REST `cp/v1`: state, notes (create is idempotent via client_id; update with base_version), trash, history, files, folders.
+- `includes/class-files.php` — image storage (private_html or fallback), `/?cp_file=ID` delivery after login.
+- `includes/class-app.php` — `/notes/` page, home → notes, manifest `/?cp_manifest=1`.
+- `includes/class-admin.php`, `includes/class-self-test.php` — status page and Live check.
+- `includes/class-ollama.php` + `assets/js/ollama.js` — Ollama test page.
+- `templates/app.php`, `assets/js/app.js` (the app, plain JS, no build), `assets/css/app.css`, `assets/icons/`.
+- `bin/build.sh` — builds `dist/content-pipeline-X.Y.Z.zip` (tests/, bin/, docs excluded).
+
+## Tests (disposable test sites only: `CP_TEST_DISPOSABLE=1`)
+- `tests/lockdown-tests.sh ZIP` — privacy, users, login, live check, uninstall.
+- `tests/cache-sim-tests.sh` — live check vs a misconfigured cache.
+- `tests/notes-api-tests.sh` — API, folders, history, trash, images, uninstall keeps notes.
+- `tests/app-tests.sh` — browser tests with Playwright/Chromium: desktop, phone, dark mode, plain permalinks, Ollama page with a fake Ollama. Needs `PW=<playwright path>`.
+- Results for 0.2.0: `tests/reports/TEST-REPORT-0.2.0.md`.
 
 ## Next
-- User: create the hub app on Cloudways (HTTPS on, Varnish off, Permalinks "Post name"), install 0.1.2, press "Run check now" on the status page.
-- Next milestone **0.2 Notes core** (see plan). Decide D9 (custom post type vs custom tables) first — reviewer input welcome.
+- User: install 0.2.0 on a test site or the hub (SSL on, Varnish off, Permalinks "Post name"), press "Run check now", use the app on the Android phone for a few days, send feedback.
+- Then Phase 2 (article workspace: Copy prompt / Paste result, prompts + style per site, Check), or Keep import if wanted first.
 
-## Open issues
-- Not tested on the real Cloudways stack (Nginx + Apache, Breeze/Varnish). The Live check on the status page verifies this after install.
-- `readme.html` and `license.txt` in the WordPress root are static files and still reveal the WordPress version (harmless; can delete them).
+## Open issues / not tested
+- Real Cloudways stack (Nginx + Apache + Varnish, private_html permissions), real Android phone (install to home screen, Back button), real Ollama on the user's PC.
+- Very large note counts: the app loads all notes at start (fine for thousands of short notes).
+- Images cannot be added while offline (by design, D19).
+- `readme.html` and `license.txt` in the WordPress root reveal the WordPress version (harmless; can delete).

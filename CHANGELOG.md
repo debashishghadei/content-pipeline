@@ -2,6 +2,24 @@
 
 All notable changes to Content Pipeline Hub. Versions follow semantic versioning (0.x while Phase 1 is built).
 
+## 0.2.0 — 2026-10-16
+
+The notes app (Phase 1, built in one go; Google Keep import left for later).
+
+- **Notes:** quick "Take a note…" box (computer) / round + button (phone); title, text, checklists (Enter adds an item, ticked items move under "N ticked items"), pin, status (Idea → Outline ready → Draft ready → Ready → Published), status filter chips.
+- **Folders like Windows Explorer** (no tags): folders inside folders, folder tree on the left, subfolder tiles and a clickable path at the top, create / rename / move / delete, "Move to…" for notes, drag and drop of notes and folders on a computer. Starts with Inbox + 4 website folders (Madhu Infotech, happylife247, Personal brand, B2B tech); any folder can be marked as a website folder, and notes inside it belong to that website (badge on cards).
+- **Search** in all notes or only the current folder; also finds folders and checklist text; results show the folder path.
+- **Reliable saving:** autosave while typing; every change is kept in the browser until the server confirms it; works offline and saves when the connection is back (also after closing and reopening the tab); "All changes saved / Saving… / Offline / Logged out" indicator; expired security token renewed automatically; logged-out banner with Log in button; nothing is lost.
+- **Two devices:** an edit made on an older version never overwrites the newer one; it is saved as "(conflict copy)" and the user is told.
+- **History:** earlier text is kept before changes (at most every 10 minutes, up to 50 versions); restore any version (the text before restoring is kept too).
+- **Trash:** trash with Undo, restore (into the Inbox if its folder was deleted), delete forever, empty trash; deleted for good after 30 days. Deleting a folder moves its notes to the trash.
+- **Protected images in notes:** stored outside the public folder (Cloudways private_html) when possible, shown only after login; phone photos are shrunk before upload; JPG/PNG/GIF/WebP only (checked on the server). Fallback folder with random names + deny rule when there is no private folder (status page warns).
+- **Phone:** full-screen editor, Android Back closes a note, folder drawer, "Add to home screen" / Install app (manifest + icons), dark mode.
+- **Ollama test page** (Content Pipeline → Ollama test): checks Ollama on the PC from the browser, lists models, runs a test prompt with speed, explains OLLAMA_ORIGINS / restart / Chrome local-network permission.
+- Notes are private posts (type `cp_note`, folders = private taxonomy `cp_folder`); a backup list is under Content Pipeline → All notes. Notes are stored exactly as typed and always shown as text. Uninstalling the plugin keeps notes, folders and images.
+- Fixed while testing: restoring an old version crashed (PHP by-reference argument); after a conflict the copy lost its "(conflict copy)" title; the Offline/Logged-out indicator flickered to "Saving…".
+- Tests: new `tests/app-tests.sh` (browser, desktop + phone), `tests/notes-api-tests.sh` (server), fake Ollama helper.
+
 ## 0.1.2 — 2026-10-16
 
 From ChatGPT's review of 0.1.1 (confirmed by test before fixing).
