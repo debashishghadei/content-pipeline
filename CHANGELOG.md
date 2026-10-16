@@ -2,6 +2,14 @@
 
 All notable changes to Content Pipeline Hub. Versions follow semantic versioning (0.x while Phase 1 is built).
 
+## 0.1.2 — 2026-10-16
+
+From ChatGPT's review of 0.1.1 (confirmed by test before fixing).
+
+- Fixed: the Live check sent `Cache-Control: no-cache`, so a cache that obeys it was skipped. Reproduced with a simulated cache: a normal visitor got the private notes page while all 8 checks passed. Now each visitor page is requested twice like a normal visitor (no bypass headers) and once with no-cache for comparison; a different answer is reported as a cache serving private pages. The REST check is also asked twice. "Page cache: OK" now says it is a spot check, not a guarantee.
+- Test scripts refuse to run unless `CP_TEST_DISPOSABLE=1` is set, and `lockdown-tests.sh` deletes only the application passwords it created (other passwords, e.g. on `admin`, are kept).
+- New `tests/cache-sim-tests.sh` + `tests/cache-sim-proxy.js`: regression test with a misconfigured cache in front of the site.
+
 ## 0.1.1 — 2026-10-16
 
 From ChatGPT's review of 0.1.0 (both points confirmed by test before fixing).

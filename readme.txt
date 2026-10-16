@@ -4,7 +4,7 @@ Tags: private, notes, content, workflow
 Requires at least: 6.8
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.1.1
+Stable tag: 0.1.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -22,6 +22,9 @@ Install on a separate, private WordPress site (the "hub").
 Version 0.1 is the locked-down shell. Notes arrive in 0.2.
 
 == Changelog ==
+
+= 0.1.2 =
+* Live check asks like a normal visitor (no cache-bypass headers), twice, and compares with a fresh request, so a cache serving private pages is caught.
 
 = 0.1.1 =
 * Users without hub permission are blocked from wp-admin and admin-ajax too.

@@ -14,3 +14,4 @@ Numbered decisions for Content Pipeline Hub. To change one, add a new line under
 - **D10** — Manual updates (upload zip → "Replace current with uploaded"); `Update URI: false` blocks wordpress.org updates.
 - **D11** — (0.1.1, from ChatGPT review) Logged-in users without `cp_use_hub` get 403 everywhere: front-end, REST, every wp-admin screen, admin-ajax and admin-post, with a "Log out" link. Login, logout and password recovery stay open.
 - **D12** — (0.1.1) The status page separates "Protection enabled" (settings) from the "Live check" (verified by requesting the site as a logged-out visitor). Cloudways/cache status counts as unverified until the live check passes on the real server.
+- **D13** — (0.1.2, from ChatGPT review) The Live check must test like a real visitor: no cache-bypass headers, each page asked twice, compared with a fresh request. A pass is reported as a spot check, never as proof that no cache exists.

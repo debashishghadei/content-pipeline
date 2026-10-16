@@ -1,10 +1,15 @@
 #!/bin/bash
 # Lockdown tests for Content Pipeline Hub 0.1.x.
 #
-# Usage: tests/lockdown-tests.sh /path/to/content-pipeline-X.Y.Z.zip
+# DISPOSABLE TEST SITES ONLY. This script reinstalls and uninstalls the plugin, switches
+# permalinks, creates test users (sub1, ed1) and a draft, empties debug.log, and creates
+# temporary application passwords (it deletes only the ones it created).
+#
+# Usage: CP_TEST_DISPOSABLE=1 tests/lockdown-tests.sh /path/to/content-pipeline-X.Y.Z.zip
 # Needs: a WordPress test site served at $BASE, WP-CLI as `wp` pointed at it,
-#        an "admin"/"admin" administrator. The site's debug.log is truncated at start.
+#        an "admin"/"admin" administrator.
 set -u
+[ "${CP_TEST_DISPOSABLE:-}" = "1" ] || { echo "Refusing to run: set CP_TEST_DISPOSABLE=1 (disposable test site only)."; exit 2; }
 ZIP="$1"
 BASE="${BASE:-http://localhost:8080}"
 WP_DIR="${WP_DIR:-/home/claude/rig/wp}"
@@ -33,6 +38,17 @@ expect_body() { # name pattern
 }
 no_leak() { # name: body must not show site content
 	if grep -qi -e 'Hello world' -e 'Sample Page' -e '"slug"' -e 'admin@example.com' "$TMP/body"; then bad "$1 leaks content" "content found in body"; else ok "$1 shows no content"; fi
+}
+
+# Delete only the application passwords this script created (name cp-test-run).
+# UUIDs of a user's application passwords with a given name.
+apw_ids() { # user name
+	CP_U="$1" CP_N="$2" wp eval 'foreach ( WP_Application_Passwords::get_user_application_passwords( (int) get_user_by( "login", getenv( "CP_U" ) )->ID ) as $p ) { if ( $p["name"] === getenv( "CP_N" ) ) { echo $p["uuid"], "\n"; } }'
+}
+drop_test_apw() {
+	for id in $(apw_ids "$1" cp-test-run); do
+		wp user application-password delete "$1" "$id" >/dev/null 2>&1
+	done
 }
 
 echo "== Install plugin from $ZIP"
@@ -101,9 +117,12 @@ $A -H "X-WP-Nonce: $NONCE" "$BASE/wp-json/wp/v2/users/me"; expect_code "REST wit
 $A -X POST --data 'action=heartbeat&_nonce=x' "$BASE/wp-admin/admin-ajax.php"; [ "$(code)" != "403" ] && ok "admin-ajax works when logged in ($(code))" || bad "admin-ajax works when logged in" "403"
 
 echo "== Application password (for Phase 3 publishing)"
-APW=$(wp user application-password create admin test-run --porcelain 2>/dev/null)
+apw_ids admin keep-me | grep -q . || wp user application-password create admin keep-me >/dev/null
+APW=$(wp user application-password create admin cp-test-run --porcelain 2>/dev/null)
 curl -4 -s -o "$TMP/body" -D "$TMP/head" -u "admin:$APW" "$BASE/wp-json/wp/v2/users/me"; expect_code "REST with application password" 200
-wp user application-password delete admin --all >/dev/null 2>&1
+drop_test_apw admin
+apw_ids admin keep-me | grep -q . && ok "other application passwords are kept" || bad "other application passwords are kept" "keep-me deleted"
+[ -z "$(apw_ids admin cp-test-run)" ] && ok "test application password removed" || bad "test application password removed" "still there"
 
 echo "== Admin keeps full wp-admin access"
 login admin admin
@@ -130,9 +149,9 @@ no_access_tests() { # user role
 	$A -X POST --data 'action=content_pipeline_self_test' "$BASE/wp-admin/admin-post.php"; expect_code "$r POST admin-post" 403
 	$A -X POST "$BASE/wp-admin/async-upload.php"; expect_code "$r POST async-upload" 403
 	$A "$BASE/wp-json/wp/v2/users/me"; expect_code "$r REST cookie without nonce" 401
-	local apw; apw=$(wp user application-password create "$u" test-run --porcelain 2>/dev/null)
+	local apw; apw=$(wp user application-password create "$u" cp-test-run --porcelain 2>/dev/null)
 	curl -4 -s -o "$TMP/body" -D "$TMP/head" -u "$u:$apw" "$BASE/wp-json/wp/v2/posts?status=draft"; expect_code "$r REST with application password" 403; no_leak "$r REST with application password"
-	wp user application-password delete "$u" --all >/dev/null 2>&1
+	drop_test_apw "$u"
 	# Log out using the link on the 403 page.
 	$A "$BASE/wp-admin/"; local out; out=$(grep -o "href='[^']*action=logout[^']*'" "$TMP/body" | head -1 | sed "s/^href='//; s/'$//; s/&#038;/\&/g; s/&amp;/\&/g")
 	curl -4 -s -o /dev/null -D "$TMP/head" -b "$JAR" -c "$JAR" "$out"
