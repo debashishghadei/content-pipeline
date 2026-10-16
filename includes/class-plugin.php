@@ -32,9 +32,13 @@ final class Plugin {
 		add_action( 'init', array( __CLASS__, 'maybe_flush_rules' ), 99 );
 
 		Lockdown::init();
+		Notes::init();
+		Api::init();
+		Files::init();
 		App::init();
 		Admin::init();
 		Self_Test::init();
+		Ollama::init();
 	}
 
 	/**
@@ -72,6 +76,8 @@ final class Plugin {
 	 * Activation.
 	 */
 	public static function activate(): void {
+		Notes::register();
+		Notes::maybe_seed();
 		App::add_rewrite_rules();
 		flush_rewrite_rules( false );
 		update_option( self::RULES_OPTION, CONTENT_PIPELINE_VERSION, false );

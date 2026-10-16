@@ -28,6 +28,10 @@ require_once CONTENT_PIPELINE_DIR . 'includes/class-lockdown.php';
 require_once CONTENT_PIPELINE_DIR . 'includes/class-app.php';
 require_once CONTENT_PIPELINE_DIR . 'includes/class-admin.php';
 require_once CONTENT_PIPELINE_DIR . 'includes/class-self-test.php';
+require_once CONTENT_PIPELINE_DIR . 'includes/class-notes.php';
+require_once CONTENT_PIPELINE_DIR . 'includes/class-files.php';
+require_once CONTENT_PIPELINE_DIR . 'includes/class-api.php';
+require_once CONTENT_PIPELINE_DIR . 'includes/class-ollama.php';
 
 register_activation_hook( __FILE__, array( Plugin::class, 'activate' ) );
 register_deactivation_hook( __FILE__, array( Plugin::class, 'deactivate' ) );

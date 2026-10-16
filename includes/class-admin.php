@@ -144,10 +144,26 @@ final class Admin {
 			);
 		}
 
+		if ( Files::is_outside_public() ) {
+			$checks[] = array(
+				'state' => 'ok',
+				'label' => __( 'Note images', 'content-pipeline' ),
+				/* translators: %s: folder path on the server. */
+				'text'  => sprintf( __( 'Stored outside the public web folder (%s) and shown only after login.', 'content-pipeline' ), Files::dir() ),
+			);
+		} else {
+			$checks[] = array(
+				'state' => 'warn',
+				'label' => __( 'Note images', 'content-pipeline' ),
+				/* translators: %s: folder path on the server. */
+				'text'  => sprintf( __( 'No private folder next to the site was found, so images are kept in %s with random 32-character names and a "deny" rule. That rule only works on Apache; on Nginx a file whose exact name is known could be opened. On Cloudways this is normally the private_html folder; check it exists and is writable.', 'content-pipeline' ), Files::dir() ),
+			);
+		}
+
 		$checks[] = array(
 			'state' => 'warn',
-			'label' => __( 'Uploaded files', 'content-pipeline' ),
-			'text'  => __( 'Files in the Media Library can still be opened by anyone who has the direct link. Do not upload private files until version 0.5 (protected attachments).', 'content-pipeline' ),
+			'label' => __( 'Media Library', 'content-pipeline' ),
+			'text'  => __( 'Files uploaded to the WordPress Media Library are NOT protected (anyone with the direct link can open them). Add private images inside notes instead.', 'content-pipeline' ),
 		);
 
 		return $checks;
