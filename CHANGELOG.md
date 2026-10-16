@@ -2,6 +2,14 @@
 
 All notable changes to Content Pipeline Hub. Versions follow semantic versioning (0.x while Phase 1 is built).
 
+## 0.3.2 — 2026-10-16
+
+From ChatGPT's review of 0.3.1 (reproduced with a test before fixing).
+
+- **Fixed: taking over another tab's safety copy deleted the old copy even when the new copy could not be written** (e.g. browser storage full), leaving the text only in memory. Reproduced with a simulated storage-quota failure. Now `persist()` reports whether every copy was written; the old copies are removed only after ours are stored, a copy that is waiting is never taken twice, and the app shows "Not saved" with a message to keep the tab open while the browser cannot store safety copies.
+- **Upgrade safety for images:** images stored by 0.2.0–0.3.0 in the old public fallback folder keep working, the status page reports them, and a **Move them to the private folder** button moves them and removes the old folder (when no private folder exists yet, the page says what to do first). No site is known to have such images, since 0.2.0–0.3.0 were never installed on a real site.
+- Tests: tests/review-031-app.js (storage failure during takeover), tests/review-031-tests.sh (old images: report, still shown, move, permissions).
+
 ## 0.3.1 — 2026-10-16
 
 From ChatGPT's review of 0.3.0. All five points were reproduced with a test before fixing (tests/review-030-tests.sh, tests/review-030-app.js).

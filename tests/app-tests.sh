@@ -36,4 +36,7 @@ node "$DIR/app-tests.js"; R1=$?
 echo
 echo "== Saving and recovery (ChatGPT review of 0.3.0)"
 node "$DIR/review-030-app.js"; R2=$?
-[ "$R1" -eq 0 ] && [ "$R2" -eq 0 ]
+echo
+echo "== Taking over safety copies when storage fails (ChatGPT review of 0.3.1)"
+node "$DIR/review-031-app.js"; R3=$?
+[ "$R1" -eq 0 ] && [ "$R2" -eq 0 ] && [ "$R3" -eq 0 ]

@@ -27,6 +27,26 @@ final class Admin {
 		add_action( 'admin_bar_menu', array( __CLASS__, 'admin_bar' ), 35 );
 		add_filter( 'plugin_action_links_' . plugin_basename( CONTENT_PIPELINE_FILE ), array( __CLASS__, 'action_links' ) );
 		add_action( 'admin_post_' . self::MODE_ACTION, array( __CLASS__, 'save_mode' ) );
+		add_action( 'admin_post_' . self::MOVE_ACTION, array( __CLASS__, 'move_images' ) );
+	}
+
+	/**
+	 * The admin-post action and nonce for moving old public images.
+	 */
+	public const MOVE_ACTION = 'content_pipeline_move_images';
+
+	/**
+	 * "Move them to the private folder" button.
+	 */
+	public static function move_images(): void {
+		if ( ! current_user_can( Plugin::CAP ) ) {
+			wp_die( esc_html__( 'You do not have access to this hub.', 'content-pipeline' ), '', array( 'response' => 403 ) );
+		}
+		check_admin_referer( self::MOVE_ACTION );
+		$result = Files::move_legacy();
+		$arg    = is_wp_error( $result ) ? 'error' : ( $result['failed'] ? 'partly' : 'done' );
+		wp_safe_redirect( admin_url( 'admin.php?page=' . self::PAGE . '&cp_images=' . $arg ) );
+		exit;
 	}
 
 	/**
@@ -287,6 +307,7 @@ final class Admin {
 
 			<h2><?php esc_html_e( 'Setup', 'content-pipeline' ); ?></h2>
 			<?php self::render_rows( self::setup_checks() ); ?>
+			<?php self::render_legacy_images(); ?>
 
 			<p class="description">
 				<?php
@@ -294,6 +315,36 @@ final class Admin {
 				echo esc_html( sprintf( __( 'Version %s', 'content-pipeline' ), CONTENT_PIPELINE_VERSION ) );
 				?>
 			</p>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Images left in the old public folder by 0.2.0–0.3.0.
+	 */
+	private static function render_legacy_images(): void {
+		$count = count( Files::legacy_files() );
+		if ( ! $count ) {
+			return;
+		}
+		?>
+		<div class="notice notice-warning inline" style="max-width:900px;margin-top:16px" id="cp-legacy-images">
+			<p><strong>
+				<?php
+				/* translators: 1: number of images, 2: folder path. */
+				echo esc_html( sprintf( _n( '%1$d image from an earlier version is still in the public folder %2$s.', '%1$d images from an earlier version are still in the public folder %2$s.', $count, 'content-pipeline' ), $count, Files::legacy_dir() ) );
+				?>
+			</strong></p>
+			<p><?php esc_html_e( 'On Nginx, anyone who knows an image\'s exact 32-character name could open it there. Your notes still show these images.', 'content-pipeline' ); ?></p>
+			<?php if ( Files::enabled() ) : ?>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="<?php echo esc_attr( self::MOVE_ACTION ); ?>">
+					<?php wp_nonce_field( self::MOVE_ACTION ); ?>
+					<p><?php submit_button( __( 'Move them to the private folder', 'content-pipeline' ), 'primary', 'submit', false ); ?></p>
+				</form>
+			<?php else : ?>
+				<p><?php esc_html_e( 'To move them: first make sure the site has a private folder outside the website (on Cloudways: private_html next to public_html), then come back here and click "Move them to the private folder". If you do not need these images, you can instead delete that folder with FileZilla.', 'content-pipeline' ); ?></p>
+			<?php endif; ?>
 		</div>
 		<?php
 	}

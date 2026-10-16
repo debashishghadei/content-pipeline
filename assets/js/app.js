@@ -160,7 +160,7 @@
 		view: { mode: 'folder', folder: 0, q: '', scope: 'all', status: '' },
 		expanded: new Set(),
 		pending: new Map(),
-		sync: { state: 'saved', flushing: false, nonce: C.nonce, lastRefresh: Date.now() },
+		sync: { state: 'saved', flushing: false, nonce: C.nonce, lastRefresh: Date.now(), storageError: false },
 		editorKey: null,
 		trash: null,
 	};
@@ -327,6 +327,7 @@
 	const PREFIX = C.storageKey + ':';
 	const ALIVE_MS = 15000;
 	let written = new Set();
+	const taken = new Set(); // Other tabs' records we took over; removed only after ours are stored.
 	let leaving = false; // Set when the tab is closing; Chrome may still fire "hidden" afterwards.
 
 	function recordKey( key ) {
@@ -342,24 +343,51 @@
 		} catch ( e ) {}
 	}
 
+	/**
+	 * Store this tab's safety copies.
+	 *
+	 * @return {boolean} True only if every copy was written.
+	 */
 	function persist() {
-		try {
-			const now = new Set();
-			for ( const entry of S.pending.values() ) {
-				const k = recordKey( entry.key );
+		const now = new Set();
+		let stored = true;
+		for ( const entry of S.pending.values() ) {
+			const k = recordKey( entry.key );
+			try {
 				window.localStorage.setItem( k, JSON.stringify( { v: 2, tab: TAB, entry } ) );
 				now.add( k );
+			} catch ( e ) {
+				stored = false;
+				if ( written.has( k ) ) {
+					now.add( k ); // Keep the older copy rather than none.
+				}
 			}
+		}
+		try {
 			for ( const k of written ) {
 				if ( ! now.has( k ) ) {
 					window.localStorage.removeItem( k );
 				}
 			}
-			written = now;
-			heartbeat();
-		} catch ( e ) {
-			setSync( 'error', 'This browser could not keep a safety copy (storage full?).' );
+		} catch ( e ) {}
+		written = now;
+		heartbeat();
+
+		const wasBroken = S.sync.storageError;
+		S.sync.storageError = ! stored;
+		if ( stored ) {
+			// Our copies are safe now: forget the other tabs' copies we took over.
+			try {
+				taken.forEach( ( k ) => window.localStorage.removeItem( k ) );
+				taken.clear();
+			} catch ( e ) {}
 		}
+		if ( ! stored ) {
+			setSync( 'error' );
+		} else if ( wasBroken ) {
+			setSync( currentSync() );
+		}
+		return stored;
 	}
 
 	/**
@@ -373,7 +401,7 @@
 		try {
 			for ( let i = 0; i < window.localStorage.length; i++ ) {
 				const k = window.localStorage.key( i );
-				if ( k === C.storageKey ) {
+				if ( k === C.storageKey && ! taken.has( k ) ) {
 					// 0.3.0 kept one list for all tabs under the bare key.
 					const old = JSON.parse( window.localStorage.getItem( k ) || '{}' );
 					( old.pending || [] ).forEach( ( entry ) => found.push( entry ) );
@@ -385,8 +413,8 @@
 				}
 				const rest = k.slice( ( PREFIX + 'rec:' ).length );
 				const tab = rest.slice( 0, rest.indexOf( ':' ) );
-				if ( tab === TAB ) {
-					continue;
+				if ( tab === TAB || taken.has( k ) ) {
+					continue; // Ours, or already taken over (waiting for our copy to be stored).
 				}
 				const alive = Number( window.localStorage.getItem( PREFIX + 'alive:' + tab ) || 0 );
 				if ( alive && Date.now() - alive < ALIVE_MS ) {
@@ -415,9 +443,10 @@
 			}
 			placeEntry( S.pending.get( entry.key ) || entry, S.notes );
 		}
-		persist(); // Our own copies first…
+		// The old copies are removed by persist() only once ours are stored (never before).
+		dropKeys.forEach( ( k ) => taken.add( k ) );
+		persist();
 		try {
-			dropKeys.forEach( ( k ) => window.localStorage.removeItem( k ) ); // …then remove the old ones.
 			for ( let i = window.localStorage.length - 1; i >= 0; i-- ) {
 				const k = window.localStorage.key( i );
 				if ( k && k.startsWith( PREFIX + 'alive:' ) && k !== PREFIX + 'alive:' + TAB ) {
@@ -778,6 +807,16 @@
 		scheduleFlush( 0 );
 	}
 
+	function currentSync() {
+		if ( S.pending.size && false === navigator.onLine ) {
+			return 'offline';
+		}
+		if ( waitingCount() ) {
+			return 'saving';
+		}
+		return failedCount() ? 'error' : 'saved';
+	}
+
 	function failedCount() {
 		let n = 0;
 		for ( const e of S.pending.values() ) {
@@ -811,7 +850,10 @@
 
 	function errorBanner() {
 		const failed = Array.from( S.pending.values() ).filter( ( e ) => e.error );
-		const el = h( 'div', { id: 'cp-error-banner', class: 'cp-banner', role: 'alert', hidden: ! failed.length } );
+		const el = h( 'div', { id: 'cp-error-banner', class: 'cp-banner', role: 'alert', hidden: ! failed.length && ! S.sync.storageError } );
+		if ( S.sync.storageError ) {
+			el.appendChild( h( 'span', { style: 'flex:1 1 100%' }, 'This browser could not store a safety copy of your unsaved changes (its storage may be full). Keep this tab open until everything is saved.' ) );
+		}
 		if ( failed.length ) {
 			const first = failed[ 0 ];
 			const n = S.notes.get( first.key ) || noteFromEntry( first );
@@ -875,6 +917,11 @@
 	function setSync( state, detail ) {
 		if ( 'saving' === state && ! S.pending.size && ! S.sync.flushing ) {
 			state = 'saved';
+		}
+		// No safety copy could be stored: more important than "offline" or "saved".
+		if ( S.sync.storageError && 'login' !== state ) {
+			state = 'error';
+			detail = 'This browser could not store a safety copy (storage full?)';
 		}
 		// "Saved" only when nothing is waiting; refused changes keep the error showing.
 		if ( ( 'saved' === state || 'saving' === state ) && ! S.sync.flushing && S.pending.size && ! waitingCount() ) {
@@ -2500,7 +2547,7 @@
 		} );
 
 		// For automated tests and troubleshooting.
-		window.cpHub = { state: S, flush, refresh: refreshFromServer };
+		window.cpHub = { state: S, flush, refresh: refreshFromServer, adopt: adoptOrphans };
 	}
 
 	start();

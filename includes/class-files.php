@@ -76,6 +76,78 @@ final class Files {
 	}
 
 	/**
+	 * Folder used by 0.2.0–0.3.0 when no private folder existed (inside the website).
+	 */
+	public static function legacy_dir(): string {
+		$uploads = wp_get_upload_dir();
+		return untrailingslashit( $uploads['basedir'] ) . '/content-pipeline-private';
+	}
+
+	/**
+	 * Images still in the old public folder.
+	 *
+	 * @return string[] Full paths.
+	 */
+	public static function legacy_files(): array {
+		$dir = self::legacy_dir();
+		if ( ! is_dir( $dir ) ) {
+			return array();
+		}
+		$files = array();
+		foreach ( (array) glob( $dir . '/*' ) as $path ) {
+			$base = basename( (string) $path );
+			$ext  = pathinfo( $base, PATHINFO_EXTENSION );
+			if ( in_array( $ext, self::TYPES, true ) && self::valid_id( pathinfo( $base, PATHINFO_FILENAME ) ) ) {
+				$files[] = (string) $path;
+			}
+		}
+		return $files;
+	}
+
+	/**
+	 * Move images from the old public folder into the private folder, then remove the old folder.
+	 *
+	 * @return array{moved: int, failed: int}|\WP_Error
+	 */
+	public static function move_legacy() {
+		if ( ! self::enabled() ) {
+			return new \WP_Error( 'cp_file_storage', __( 'There is no private folder outside the website yet, so the images cannot be moved.', 'content-pipeline' ) );
+		}
+		if ( ! self::ensure_dir() ) {
+			return new \WP_Error( 'cp_file_dir', __( 'The server could not create the private folder for images. Check folder permissions.', 'content-pipeline' ) );
+		}
+		$moved  = 0;
+		$failed = 0;
+		foreach ( self::legacy_files() as $path ) {
+			$target = self::dir() . '/' . basename( $path );
+			// Move a private file between two server folders; the result is checked.
+			$ok = file_exists( $target ) || @rename( $path, $target ) || ( @copy( $path, $target ) && filesize( $target ) === filesize( $path ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.rename_rename
+			if ( $ok ) {
+				wp_delete_file( $path );
+				++$moved;
+			} else {
+				++$failed;
+			}
+		}
+		if ( ! $failed ) {
+			$dir = self::legacy_dir();
+			foreach ( array( '.htaccess', 'index.php' ) as $guard ) {
+				if ( file_exists( $dir . '/' . $guard ) ) {
+					wp_delete_file( $dir . '/' . $guard );
+				}
+			}
+			if ( is_dir( $dir ) && 2 === count( (array) scandir( $dir ) ) ) {
+				// Remove the now empty old folder (best effort).
+				@rmdir( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir
+			}
+		}
+		return array(
+			'moved'  => $moved,
+			'failed' => $failed,
+		);
+	}
+
+	/**
 	 * Can images be added? Only when the storage folder is outside the public web folder.
 	 */
 	public static function enabled(): bool {
@@ -305,10 +377,13 @@ final class Files {
 	 * @param string $id File id.
 	 */
 	private static function path_for( string $id ): string {
-		foreach ( self::TYPES as $ext ) {
-			$path = self::dir() . '/' . $id . '.' . $ext;
-			if ( is_file( $path ) ) {
-				return $path;
+		// The old public folder is only read, so images from 0.2.0–0.3.0 keep showing until moved.
+		foreach ( array( self::dir(), self::legacy_dir() ) as $dir ) {
+			foreach ( self::TYPES as $ext ) {
+				$path = $dir . '/' . $id . '.' . $ext;
+				if ( is_file( $path ) ) {
+					return $path;
+				}
 			}
 		}
 		return '';

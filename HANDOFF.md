@@ -3,9 +3,9 @@
 Read this first when starting a new chat (Claude or ChatGPT). Update it at the end of every chat/milestone.
 
 ## Current state (16 Oct 2026)
-- Version: **0.3.1** — the private hub (lockdown, 0.1.x), the notes app (0.2.0, Phase 1 except Google Keep import), the "Private site" switch (0.3.0: OFF = normal website, notes still private) and the fixes from ChatGPT's review of 0.3.0 (0.3.1: per-note save lock, safer safety copies, refused saves kept, images only outside the website). Built and tested in the sandbox; not yet installed on a real site.
-- Review history: ChatGPT reviewed 0.1.0 (2 points, both confirmed, fixed in 0.1.1), 0.1.1 (1 point, confirmed, fixed in 0.1.2) and 0.3.0 (5 points, all confirmed by test, fixed in 0.3.1). ChatGPT recommends continuing with this plugin only. ChatGPT also listed what is still missing from the full plan (Phases 2–4: article workspace, prompts/style per site, sending drafts, receiver plugin, Ollama in buttons; Keep import) — known and planned.
-- Full plan: project note "content-pipeline.md" (Claude project "Tools"); decisions in `DECISIONS.md` (D1–D28).
+- Version: **0.3.2** — (0.3.2: takeover keeps old safety copies until the new ones are stored; move button for old public images) — the private hub (lockdown, 0.1.x), the notes app (0.2.0, Phase 1 except Google Keep import), the "Private site" switch (0.3.0: OFF = normal website, notes still private) and the fixes from ChatGPT's review of 0.3.0 (0.3.1: per-note save lock, safer safety copies, refused saves kept, images only outside the website). Built and tested in the sandbox; not yet installed on a real site.
+- Review history: ChatGPT reviewed 0.1.0 (2 points, both confirmed, fixed in 0.1.1), 0.1.1 (1 point, confirmed, fixed in 0.1.2) 0.3.0 (5 points, all confirmed by test, fixed in 0.3.1) and 0.3.1 (1 point + upgrade note, confirmed, fixed in 0.3.2; ChatGPT accepts localStorage with per-tab records and recommends: keep this implementation, test on Cloudways, Private site ON for the hub). ChatGPT recommends continuing with this plugin only. ChatGPT also listed what is still missing from the full plan (Phases 2–4: article workspace, prompts/style per site, sending drafts, receiver plugin, Ollama in buttons; Keep import) — known and planned.
+- Full plan: project note "content-pipeline.md" (Claude project "Tools"); decisions in `DECISIONS.md` (D1–D30).
 
 ## What the app does (0.2.0+)
 - Notes with title, text, checklist, pin, status (Idea → Outline ready → Draft ready → Ready → Published), images.
@@ -32,12 +32,13 @@ Read this first when starting a new chat (Claude or ChatGPT). Update it at the e
 - `tests/lockdown-tests.sh ZIP` — privacy, users, login, live check, uninstall.
 - `tests/cache-sim-tests.sh` — live check vs a misconfigured cache.
 - `tests/notes-api-tests.sh` — API, folders, history, trash, images, uninstall keeps notes.
-- `tests/app-tests.sh` — browser tests with Playwright/Chromium: desktop, phone, dark mode, plain permalinks, images off, private site off, Ollama page with a fake Ollama, plus `review-030-app.js` (recovery, tabs, refused saves). Needs `PW=<playwright path>`; creates private_html next to the site.
+- `tests/app-tests.sh` — browser tests with Playwright/Chromium: desktop, phone, dark mode, plain permalinks, images off, private site off, Ollama page with a fake Ollama, plus `review-030-app.js` (recovery, tabs, refused saves) and `review-031-app.js` (storage failure during takeover). Needs `PW=<playwright path>`; creates private_html next to the site.
 - `tests/review-030-tests.sh` — simultaneous saves/restores (slowed down by a temporary test-only mu-plugin) and image storage.
-- Results: `tests/reports/TEST-REPORT-0.3.1.md` (and earlier reports).
+- `tests/review-031-tests.sh` — old public images: reported, still shown, moved by the button.
+- Results: `tests/reports/TEST-REPORT-0.3.2.md` (and earlier reports).
 
 ## Next
-- User: install 0.3.1 on the Madhu Infotech test site with the switch OFF (or on the hub with it ON: SSL on, Varnish off, Permalinks "Post name"), press "Run check now", use the app on the Android phone for a few days, send feedback.
+- User: install 0.3.2 on the Madhu Infotech test site with the switch OFF (or on the hub with it ON: SSL on, Varnish off, Permalinks "Post name"), press "Run check now", use the app on the Android phone for a few days, send feedback.
 - Then Phase 2 (article workspace: Copy prompt / Paste result, prompts + style per site, Check), or Keep import if wanted first.
 
 ## Open issues / not tested
