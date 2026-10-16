@@ -2,6 +2,13 @@
 
 All notable changes to Content Pipeline Hub. Versions follow semantic versioning (0.x while Phase 1 is built).
 
+## 0.3.3 — 2026-10-17
+
+From ChatGPT's review of 0.3.2 (reproduced with a test before fixing).
+
+- **Fixed: when the same tab changed a safety copy's key while browser storage was full, the old copy was deleted.** Reproduced: a note with unsaved text is deleted on another device; the 404 queues a replacement note; storage refuses the replacement; the old copy was removed anyway (text only in memory). Also reproduced for a new note getting its server id while more text is still unsaved. Now `persist()` removes old copies only when every current copy was written — this applies to every change of record key (rescued note, new note's server id, conflict copy, taken-over tab).
+- Tests: tests/review-032-app.js (both scenarios fail on 0.3.2, pass on 0.3.3).
+
 ## 0.3.2 — 2026-10-16
 
 From ChatGPT's review of 0.3.1 (reproduced with a test before fixing).

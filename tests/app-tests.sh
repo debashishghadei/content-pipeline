@@ -39,4 +39,7 @@ node "$DIR/review-030-app.js"; R2=$?
 echo
 echo "== Taking over safety copies when storage fails (ChatGPT review of 0.3.1)"
 node "$DIR/review-031-app.js"; R3=$?
-[ "$R1" -eq 0 ] && [ "$R2" -eq 0 ] && [ "$R3" -eq 0 ]
+echo
+echo "== Same-tab record changes when storage fails (ChatGPT review of 0.3.2)"
+node "$DIR/review-032-app.js"; R4=$?
+[ "$R1" -eq 0 ] && [ "$R2" -eq 0 ] && [ "$R3" -eq 0 ] && [ "$R4" -eq 0 ]

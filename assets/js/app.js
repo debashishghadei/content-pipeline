@@ -344,7 +344,8 @@
 	}
 
 	/**
-	 * Store this tab's safety copies.
+	 * Store this tab's safety copies. A copy is never removed before its replacement is
+	 * confirmed written (D29, D31).
 	 *
 	 * @return {boolean} True only if every copy was written.
 	 */
@@ -363,14 +364,23 @@
 				}
 			}
 		}
-		try {
-			for ( const k of written ) {
-				if ( ! now.has( k ) ) {
-					window.localStorage.removeItem( k );
+		if ( stored ) {
+			// Every current copy is written: now (and only now) remove copies no longer needed.
+			// This covers every change of record key: a rescued note, a new note getting its
+			// server id, a conflict copy, a taken-over tab.
+			try {
+				for ( const k of written ) {
+					if ( ! now.has( k ) ) {
+						window.localStorage.removeItem( k );
+					}
 				}
-			}
-		} catch ( e ) {}
-		written = now;
+			} catch ( e ) {}
+			written = now;
+		} else {
+			// Something could not be written: keep every older copy until a later write works.
+			written.forEach( ( k ) => now.add( k ) );
+			written = now;
+		}
 		heartbeat();
 
 		const wasBroken = S.sync.storageError;
