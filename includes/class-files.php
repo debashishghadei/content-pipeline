@@ -2,12 +2,11 @@
 /**
  * Protected images in notes.
  *
- * Files are stored outside the public web folder when possible (Cloudways: the app's
- * private_html folder next to public_html), so the web server can never hand them out
- * directly. They are only sent through PHP after the login check (/?cp_file=ID).
- * Fallback when no private folder exists: a folder inside uploads with random 32-character
- * names, an index.php and a "deny all" .htaccess (Apache only; nginx would serve a file whose
- * exact random name is known).
+ * Files are stored OUTSIDE the public web folder (Cloudways: the app's private_html folder
+ * next to public_html, or the folder in CONTENT_PIPELINE_FILES_DIR), so the web server can
+ * never hand them out directly. They are only sent through PHP after the login check
+ * (/?cp_file=ID). If no such folder is available, adding images is switched off: a folder
+ * inside the website is never used, because Nginx can serve files there directly.
  *
  * @package ContentPipeline
  */
@@ -74,6 +73,13 @@ final class Files {
 		}
 		$uploads = wp_get_upload_dir();
 		return untrailingslashit( $uploads['basedir'] ) . '/content-pipeline-private';
+	}
+
+	/**
+	 * Can images be added? Only when the storage folder is outside the public web folder.
+	 */
+	public static function enabled(): bool {
+		return self::is_outside_public();
 	}
 
 	/**
@@ -156,6 +162,10 @@ final class Files {
 	 * @return array|\WP_Error The new file entry.
 	 */
 	public static function add( int $note_id, array $upload ) {
+		if ( ! self::enabled() ) {
+			return new \WP_Error( 'cp_file_storage', __( 'Images are switched off: there is no private folder outside the website to keep them in. See Content Pipeline → Status & privacy.', 'content-pipeline' ), array( 'status' => 409 ) );
+		}
+
 		$tmp  = (string) ( $upload['tmp_name'] ?? '' );
 		$size = (int) ( $upload['size'] ?? 0 );
 

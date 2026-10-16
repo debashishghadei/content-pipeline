@@ -179,13 +179,8 @@
 			fresh.set( key, Object.assign( { key }, n ) );
 		}
 		// Keep notes that only exist on this device, and changes not yet saved.
-		for ( const [ key, entry ] of S.pending ) {
-			if ( entry.create ) {
-				const local = S.notes.get( key ) || noteFromEntry( entry );
-				fresh.set( key, local );
-			} else if ( fresh.has( key ) ) {
-				Object.assign( fresh.get( key ), clone( entry.fields ) );
-			}
+		for ( const entry of S.pending.values() ) {
+			placeEntry( entry, fresh );
 		}
 		S.notes = fresh;
 		if ( S.view.mode === 'folder' && ! S.folders.has( S.view.folder ) ) {
@@ -276,49 +271,180 @@
 	const TEXT_FIELDS = [ 'title', 'body', 'checklist' ];
 
 	function noteFromEntry( entry ) {
-		const f = entry.fields;
+		// entry.note is a full copy of the note (0.3.1+); entry.fields holds the unsaved changes.
+		const n = Object.assign( {}, entry.note || {}, entry.fields || {} );
 		return {
 			key: entry.key,
-			id: null,
+			id: entry.create ? null : ( entry.id || n.id || null ),
 			client_id: entry.client_id,
-			title: f.title || '',
-			body: f.body || '',
-			checklist: f.checklist || [],
-			folder: f.folder || S.inbox,
-			status: f.status || 'idea',
-			pinned: !! f.pinned,
-			version: 1,
+			title: n.title || '',
+			body: n.body || '',
+			checklist: n.checklist || [],
+			folder: n.folder || S.inbox,
+			status: n.status || 'idea',
+			pinned: !! n.pinned,
+			version: n.version || 1,
 			created: entry.created || nowIso(),
 			modified: entry.modified || nowIso(),
-			files: [],
-			local: true,
+			files: n.files || [],
+			local: !! entry.create,
 		};
+	}
+
+	/**
+	 * Show an unsaved change in the note list. If the note is no longer on the server
+	 * (deleted or trashed on another device), it is rebuilt from the stored copy so the
+	 * text can be saved as a new note.
+	 *
+	 * @param {Object} entry Pending change.
+	 * @param {Map}    notes Note list to update.
+	 */
+	function placeEntry( entry, notes ) {
+		if ( entry.create ) {
+			notes.set( entry.key, S.notes.get( entry.key ) || noteFromEntry( entry ) );
+		} else if ( notes.has( entry.key ) ) {
+			Object.assign( notes.get( entry.key ), clone( entry.fields ) );
+		} else {
+			notes.set( entry.key, Object.assign( noteFromEntry( entry ), { orphan: true } ) );
+		}
+	}
+
+	function snapshotOf( note ) {
+		return { id: note.id, title: note.title, body: note.body, checklist: note.checklist, folder: note.folder, status: note.status, pinned: note.pinned, version: note.version };
+	}
+
+	/*
+	 * Safety copies in localStorage.
+	 *
+	 * Each browser tab writes its own records ("<key>:rec:<tab>:<note>"), one per note with
+	 * unsaved changes, and never touches another tab's records, so tabs cannot erase each
+	 * other's copies. A live tab says so every few seconds ("<key>:alive:<tab>"); records of
+	 * a tab that is gone (closed, crashed, reloaded) are taken over and saved by the next tab.
+	 * localStorage is used (not IndexedDB) because it writes synchronously: the copy exists
+	 * even if the phone kills the tab a moment later.
+	 */
+	const TAB = uid();
+	const PREFIX = C.storageKey + ':';
+	const ALIVE_MS = 15000;
+	let written = new Set();
+	let leaving = false; // Set when the tab is closing; Chrome may still fire "hidden" afterwards.
+
+	function recordKey( key ) {
+		return PREFIX + 'rec:' + TAB + ':' + key;
+	}
+
+	function heartbeat( dead ) {
+		if ( leaving && ! dead ) {
+			return;
+		}
+		try {
+			window.localStorage.setItem( PREFIX + 'alive:' + TAB, dead ? '0' : String( Date.now() ) );
+		} catch ( e ) {}
 	}
 
 	function persist() {
 		try {
-			const data = { v: 1, pending: Array.from( S.pending.values() ) };
-			window.localStorage.setItem( C.storageKey, JSON.stringify( data ) );
+			const now = new Set();
+			for ( const entry of S.pending.values() ) {
+				const k = recordKey( entry.key );
+				window.localStorage.setItem( k, JSON.stringify( { v: 2, tab: TAB, entry } ) );
+				now.add( k );
+			}
+			for ( const k of written ) {
+				if ( ! now.has( k ) ) {
+					window.localStorage.removeItem( k );
+				}
+			}
+			written = now;
+			heartbeat();
 		} catch ( e ) {
 			setSync( 'error', 'This browser could not keep a safety copy (storage full?).' );
 		}
 	}
 
-	function restorePending() {
+	/**
+	 * Take over safety copies left by tabs that are gone (and by the 0.3.0 format).
+	 *
+	 * @return {number} How many changes were taken over.
+	 */
+	function adoptOrphans() {
+		const found = [];
+		const dropKeys = [];
 		try {
-			const raw = window.localStorage.getItem( C.storageKey );
-			if ( ! raw ) {
-				return;
-			}
-			const data = JSON.parse( raw );
-			for ( const entry of data.pending || [] ) {
-				if ( entry && entry.key && entry.fields ) {
-					S.pending.set( entry.key, entry );
+			for ( let i = 0; i < window.localStorage.length; i++ ) {
+				const k = window.localStorage.key( i );
+				if ( k === C.storageKey ) {
+					// 0.3.0 kept one list for all tabs under the bare key.
+					const old = JSON.parse( window.localStorage.getItem( k ) || '{}' );
+					( old.pending || [] ).forEach( ( entry ) => found.push( entry ) );
+					dropKeys.push( k );
+					continue;
 				}
+				if ( ! k || ! k.startsWith( PREFIX + 'rec:' ) ) {
+					continue;
+				}
+				const rest = k.slice( ( PREFIX + 'rec:' ).length );
+				const tab = rest.slice( 0, rest.indexOf( ':' ) );
+				if ( tab === TAB ) {
+					continue;
+				}
+				const alive = Number( window.localStorage.getItem( PREFIX + 'alive:' + tab ) || 0 );
+				if ( alive && Date.now() - alive < ALIVE_MS ) {
+					continue; // That tab is still open and will save its own changes.
+				}
+				const rec = JSON.parse( window.localStorage.getItem( k ) || 'null' );
+				if ( rec && rec.entry ) {
+					found.push( rec.entry );
+				}
+				dropKeys.push( k );
 			}
 		} catch ( e ) {
-			// Nothing stored, or unreadable: start clean.
+			return 0;
 		}
+		for ( const entry of found ) {
+			if ( ! entry || ! entry.key || ! entry.fields ) {
+				continue;
+			}
+			delete entry.error; // Taking over = trying again.
+			if ( ! S.pending.has( entry.key ) ) {
+				S.pending.set( entry.key, entry );
+			} else {
+				// Two unsaved versions of the same note: keep the second one as its own note.
+				const n = noteFromEntry( entry );
+				addCreateEntry( Object.assign( n, { title: ( n.title || 'Untitled' ) + ' (unsaved copy)' } ) );
+			}
+			placeEntry( S.pending.get( entry.key ) || entry, S.notes );
+		}
+		persist(); // Our own copies first…
+		try {
+			dropKeys.forEach( ( k ) => window.localStorage.removeItem( k ) ); // …then remove the old ones.
+			for ( let i = window.localStorage.length - 1; i >= 0; i-- ) {
+				const k = window.localStorage.key( i );
+				if ( k && k.startsWith( PREFIX + 'alive:' ) && k !== PREFIX + 'alive:' + TAB ) {
+					const t = Number( window.localStorage.getItem( k ) || 0 );
+					if ( ! t || Date.now() - t > ALIVE_MS * 20 ) {
+						window.localStorage.removeItem( k );
+					}
+				}
+			}
+		} catch ( e ) {}
+		return found.length;
+	}
+
+	/**
+	 * Queue a brand-new note (used to rescue text).
+	 *
+	 * @param {Object} n Note data.
+	 * @return {string} Key of the new note.
+	 */
+	function addCreateEntry( n ) {
+		const cid = uid();
+		const key = 'c_' + cid;
+		const folder = S.folders.has( n.folder ) ? n.folder : S.inbox;
+		const note = { key, id: null, client_id: cid, title: n.title || '', body: n.body || '', checklist: n.checklist || [], folder, status: n.status || 'idea', pinned: !! n.pinned, version: 1, created: nowIso(), modified: nowIso(), files: [], local: true };
+		S.notes.set( key, note );
+		S.pending.set( key, { key, create: true, client_id: cid, rev: 1, created: note.created, modified: note.modified, note: snapshotOf( note ), fields: { title: note.title, body: note.body, checklist: note.checklist, folder, status: note.status, pinned: note.pinned } } );
+		return key;
 	}
 
 	/**
@@ -349,6 +475,7 @@
 		if ( ! entry.create && null === entry.base && TEXT_FIELDS.some( ( f ) => f in fields ) ) {
 			entry.base = note.version;
 		}
+		entry.note = snapshotOf( note ); // Full copy, so the text can be rebuilt without the server.
 		entry.rev++;
 		entry.modified = note.modified;
 		persist();
@@ -464,9 +591,11 @@
 			for ( const key of Array.from( S.pending.keys() ) ) {
 				await flushOne( key );
 			}
-			setSync( S.pending.size ? 'saving' : 'saved' );
-			if ( S.pending.size ) {
+			S.sync.flushing = false;
+			if ( waitingCount() ) {
 				scheduleFlush( 300 );
+			} else {
+				setSync( failedCount() ? 'error' : 'saved' );
 			}
 		} catch ( err ) {
 			if ( isLoginError( err ) ) {
@@ -489,8 +618,8 @@
 	 */
 	async function flushOne( key ) {
 		const entry = S.pending.get( key );
-		if ( ! entry ) {
-			return;
+		if ( ! entry || entry.error ) {
+			return; // Rejected changes wait for "Try again" (or the next page load).
 		}
 		const sentRev = entry.rev;
 		const fields = clone( entry.fields );
@@ -527,9 +656,11 @@
 				persist();
 				return;
 			}
-			S.pending.delete( key );
+			// The server refused this change. Never drop it: keep it (and its safety copy),
+			// say so until it is solved, and let the user try again or save it as a new note.
+			entry.error = { status: err.status, code: err.code, message: err.message, at: nowIso() };
 			persist();
-			toast( 'A change could not be saved: ' + err.message );
+			renderLight();
 			return;
 		}
 
@@ -627,23 +758,73 @@
 	}
 
 	function saveAsNewNote( key, message ) {
-		const note = S.notes.get( key );
-		S.pending.delete( key );
-		S.notes.delete( key );
+		const entry = S.pending.get( key );
+		const note = S.notes.get( key ) || ( entry ? noteFromEntry( entry ) : null );
 		if ( ! note ) {
-			persist();
 			return;
 		}
-		const cid = uid();
-		const fresh = Object.assign( {}, note, { key: 'c_' + cid, id: null, client_id: cid, local: true, version: 1, files: [], folder: S.folders.has( note.folder ) ? note.folder : S.inbox } );
-		S.notes.set( fresh.key, fresh );
-		S.pending.set( fresh.key, { key: fresh.key, create: true, client_id: cid, rev: 1, created: nowIso(), fields: { title: fresh.title, body: fresh.body, checklist: fresh.checklist, folder: fresh.folder, status: fresh.status, pinned: fresh.pinned } } );
+		// Queue the new note first; only then forget the old change, so the text always
+		// exists in at least one safety copy.
+		const newKey = addCreateEntry( note );
+		S.pending.delete( key );
+		S.notes.delete( key );
 		if ( S.editorKey === key ) {
-			S.editorKey = fresh.key;
+			S.editorKey = newKey;
+			Editor.reload();
 		}
 		persist();
 		render();
 		toast( message, null, 9000 );
+		scheduleFlush( 0 );
+	}
+
+	function failedCount() {
+		let n = 0;
+		for ( const e of S.pending.values() ) {
+			if ( e.error ) {
+				n++;
+			}
+		}
+		return n;
+	}
+
+	function waitingCount() {
+		return S.pending.size - failedCount();
+	}
+
+	function retryFailed() {
+		for ( const e of S.pending.values() ) {
+			delete e.error;
+		}
+		persist();
+		scheduleFlush( 0 );
+		renderLight();
+	}
+
+	function saveFailedAsNew() {
+		for ( const [ key, e ] of Array.from( S.pending ) ) {
+			if ( e.error ) {
+				saveAsNewNote( key, 'Your unsaved text was kept as a new note.' );
+			}
+		}
+	}
+
+	function errorBanner() {
+		const failed = Array.from( S.pending.values() ).filter( ( e ) => e.error );
+		const el = h( 'div', { id: 'cp-error-banner', class: 'cp-banner', role: 'alert', hidden: ! failed.length } );
+		if ( failed.length ) {
+			const first = failed[ 0 ];
+			const n = S.notes.get( first.key ) || noteFromEntry( first );
+			append( el, [
+				h( 'span', { style: 'flex:1' },
+					( 1 === failed.length ? 'A change to “' + ( n.title || 'Untitled note' ) + '” was not saved' : failed.length + ' changes were not saved' ) +
+					': the server refused it (' + first.error.message + '). Your text is kept on this device.'
+				),
+				h( 'button', { type: 'button', class: 'cp-btn cp-btn--primary', onClick: retryFailed }, 'Try again' ),
+				first.create ? null : h( 'button', { type: 'button', class: 'cp-btn', onClick: saveFailedAsNew }, 'Save as new note' ),
+			] );
+		}
+		return el;
 	}
 
 	async function refreshFromServer() {
@@ -688,12 +869,19 @@
 		saving: 'Saving…',
 		offline: 'Offline – changes kept on this device',
 		login: 'Logged out – changes kept on this device',
-		error: 'Not saved yet – retrying',
+		error: 'Not saved – see the message',
 	};
 
 	function setSync( state, detail ) {
 		if ( 'saving' === state && ! S.pending.size && ! S.sync.flushing ) {
 			state = 'saved';
+		}
+		// "Saved" only when nothing is waiting; refused changes keep the error showing.
+		if ( ( 'saved' === state || 'saving' === state ) && ! S.sync.flushing && S.pending.size && ! waitingCount() ) {
+			state = 'error';
+		}
+		if ( 'saved' === state && S.pending.size ) {
+			state = 'saving';
 		}
 		S.sync.state = state;
 		S.sync.detail = detail || '';
@@ -706,6 +894,10 @@
 		const banner = document.getElementById( 'cp-login-banner' );
 		if ( banner ) {
 			banner.hidden = 'login' !== state;
+		}
+		const errBanner = document.getElementById( 'cp-error-banner' );
+		if ( errBanner ) {
+			errBanner.replaceWith( errorBanner() );
 		}
 		Editor.syncText();
 	}
@@ -1420,6 +1612,7 @@
 		const inner = h( 'div', { class: 'cp-main__inner' } );
 		mainEl.appendChild( inner );
 
+		inner.appendChild( errorBanner() );
 		inner.appendChild( h( 'div', { id: 'cp-login-banner', class: 'cp-banner', hidden: 'login' !== S.sync.state },
 			h( 'span', { style: 'flex:1' }, 'You are logged out. Your changes are kept on this device and will be saved after you log in.' ),
 			h( 'a', { class: 'cp-btn cp-btn--primary', href: C.loginUrl }, 'Log in' )
@@ -1804,7 +1997,9 @@
 				els.pin,
 				iconBtn( 'list', 'Add checklist', () => addChecklist() ),
 				iconBtn( 'image', 'Add image', () => {
-					if ( needOnline() ) {
+					if ( ! C.images ) {
+						toast( 'Images are switched off on this site: there is no private folder outside the website to keep them in. See Content Pipeline → Status & privacy.', null, 9000 );
+					} else if ( needOnline() ) {
 						els.file.click();
 					}
 				} ),
@@ -2227,13 +2422,14 @@
 	 * ======================================================= */
 
 	function start() {
-		restorePending();
 		try {
 			S.expanded = new Set( JSON.parse( window.localStorage.getItem( 'cp-expanded' ) || '[]' ) );
 		} catch ( e ) {
 			S.expanded = new Set();
 		}
+		heartbeat();
 		loadServerState( C.state );
+		adoptOrphans(); // Unsaved changes left by closed tabs (or by this tab before a reload).
 		S.view.folder = S.inbox;
 		try {
 			const saved = JSON.parse( window.localStorage.getItem( 'cp-view' ) || 'null' );
@@ -2266,7 +2462,24 @@
 				flush();
 			}
 		} );
-		window.addEventListener( 'pagehide', persist );
+		window.addEventListener( 'pagehide', () => {
+			persist();
+			leaving = true;
+			heartbeat( true ); // This tab is going away: the next tab may take over its copies at once.
+		} );
+		window.addEventListener( 'pageshow', ( e ) => {
+			if ( e.persisted ) {
+				leaving = false; // Back from the browser's page cache.
+				heartbeat();
+			}
+		} );
+		window.setInterval( () => {
+			heartbeat();
+			if ( adoptOrphans() ) {
+				render();
+				scheduleFlush( 0 );
+			}
+		}, 5000 );
 		window.addEventListener( 'beforeunload', ( e ) => {
 			persist();
 			if ( S.pending.size && navigator.onLine ) {

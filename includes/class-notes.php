@@ -42,6 +42,23 @@ final class Notes {
 	public const HISTORY_KEEP = 50;
 
 	/**
+	 * A note lock older than this (seconds) is treated as left behind by a crashed request.
+	 */
+	public const LOCK_SECONDS = 30;
+
+	/**
+	 * How long a save waits for another save of the same note to finish (seconds).
+	 */
+	public const LOCK_WAIT = 10;
+
+	/**
+	 * Lock tokens held by this request, by note id.
+	 *
+	 * @var array<int, string>
+	 */
+	private static $locks = array();
+
+	/**
 	 * When true, saving a note makes no history copy (the app makes its own, see snapshot_if_due()).
 	 *
 	 * @var bool
@@ -525,6 +542,65 @@ final class Notes {
 			return $post;
 		}
 		return null;
+	}
+
+	/**
+	 * Take the note's lock, so only one request at a time can check the version and save
+	 * (and restore history). Works on any database: the lock is a row in the options table
+	 * that only one request can insert.
+	 *
+	 * @param int $note_id Note id.
+	 * @return bool False when another save kept the note busy for LOCK_WAIT seconds.
+	 */
+	public static function lock( int $note_id ): bool {
+		global $wpdb;
+
+		$name     = 'cp_note_lock_' . $note_id;
+		$token    = sprintf( '%010d-%s', time() + self::LOCK_SECONDS, wp_generate_password( 12, false ) );
+		$deadline = microtime( true ) + self::LOCK_WAIT;
+
+		do {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- an atomic insert is the lock; it must not be cached.
+			$taken = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'off')", $name, $token ) );
+			if ( 1 !== (int) $taken ) {
+				// Take over a lock whose time ran out (its request crashed).
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- atomic compare-and-set.
+				$taken = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value < %s", $token, $name, sprintf( '%010d', time() ) ) );
+			}
+			if ( 1 === (int) $taken ) {
+				self::$locks[ $note_id ] = $token;
+				return true;
+			}
+			usleep( 100000 );
+		} while ( microtime( true ) < $deadline );
+
+		return false;
+	}
+
+	/**
+	 * Release the note's lock (only if this request still holds it).
+	 *
+	 * @param int $note_id Note id.
+	 */
+	public static function unlock( int $note_id ): void {
+		global $wpdb;
+		if ( ! isset( self::$locks[ $note_id ] ) ) {
+			return;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- releases the lock row.
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s", 'cp_note_lock_' . $note_id, self::$locks[ $note_id ] ) );
+		unset( self::$locks[ $note_id ] );
+	}
+
+	/**
+	 * Read a note fresh from the database (no cached copy), e.g. right after taking its lock.
+	 *
+	 * @param int $note_id Note id.
+	 */
+	public static function fresh( int $note_id ): ?\WP_Post {
+		clean_post_cache( $note_id );
+		wp_cache_delete( $note_id, 'post_meta' );
+		return self::get( $note_id );
 	}
 
 	/**

@@ -2,7 +2,8 @@
 # Browser tests for the notes app.
 #
 # DISPOSABLE TEST SITES ONLY: deletes ALL notes, folders and note images on the test site
-# first, then runs tests/app-tests.js (Playwright + Chromium) with two fake Ollama servers.
+# first, then runs tests/app-tests.js and tests/review-030-app.js (Playwright + Chromium)
+# with two fake Ollama servers. Creates a private_html folder next to the site for images.
 #
 # Usage: CP_TEST_DISPOSABLE=1 tests/app-tests.sh
 # Env:   BASE (default http://localhost:8080), PW (playwright package path), SHOTS (screenshot folder)
@@ -22,9 +23,17 @@ ContentPipeline\Notes::maybe_seed();
 echo count( ContentPipeline\Notes::folders() ), " folders\n";
 '
 
+# Images need a private folder outside the website (Cloudways: private_html next to public_html).
+WP_PATH=$(wp eval 'echo untrailingslashit( ABSPATH );')
+mkdir -p "$(dirname "$WP_PATH")/private_html"
+
 node "$DIR/fake-ollama.js" "$OLLAMA_PORT" "$BASE" & O1=$!
 node "$DIR/fake-ollama.js" "$OLLAMA_BLOCKED_PORT" "https://not-this-site.example" & O2=$!
 trap 'kill $O1 $O2 2>/dev/null' EXIT
 sleep 1
 
-node "$DIR/app-tests.js"
+node "$DIR/app-tests.js"; R1=$?
+echo
+echo "== Saving and recovery (ChatGPT review of 0.3.0)"
+node "$DIR/review-030-app.js"; R2=$?
+[ "$R1" -eq 0 ] && [ "$R2" -eq 0 ]

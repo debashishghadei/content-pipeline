@@ -2,6 +2,17 @@
 
 All notable changes to Content Pipeline Hub. Versions follow semantic versioning (0.x while Phase 1 is built).
 
+## 0.3.1 — 2026-10-16
+
+From ChatGPT's review of 0.3.0. All five points were reproduced with a test before fixing (tests/review-030-tests.sh, tests/review-030-app.js).
+
+- **Fixed (high): two saves at the same moment could overwrite each other.** Reproduced: 3 of 3 rounds accepted both saves and lost one text; a history restore at the same moment as a save lost the typed text. Now every save and every history restore holds a per-note lock (an atomic row in the options table, works on MySQL/MariaDB and SQLite), re-reads the note fresh, then checks the version. The second save becomes a conflict copy. Locks left by crashed requests expire after 30 s; a save waiting more than 10 s gets 503 and the app retries.
+- **Fixed (high): an unsent edit was lost if the note was deleted or trashed on another device before the tab was reopened.** Every safety copy now holds the whole note, so the text is rebuilt without the server and saved as a new note; the old copy is removed only after the new one is queued.
+- **Fixed (high): a second tab could erase the first tab's safety copy.** Safety copies are now one record per tab and note; a tab never writes or deletes another tab's records. A tab that is gone (closed, reloaded, crashed) is recognised by its "alive" signal and its records are taken over by the next tab (at once after a normal close/reload, within ~15 s after a crash). Copies in the 0.3.0 format are taken over too.
+- **Fixed (high): a save refused by the server (e.g. 403) was dropped and the app said "All changes saved".** Refused changes are now kept (also across reloads), the indicator says "Not saved – see the message", and a lasting red message offers **Try again** and **Save as new note**.
+- **Fixed (privacy): images could be stored inside the public website folder when no private folder existed.** Images are now only accepted when the storage folder is outside the website (Cloudways private_html, or CONTENT_PIPELINE_FILES_DIR). Otherwise adding images is switched off, the image button explains why, and the status page says so.
+- Also fixed while testing: during a reload Chrome fired "page hidden" after "page closing", which re-marked the closing tab as alive and delayed the takeover by ~15 s (no text lost).
+
 ## 0.3.0 — 2026-10-16
 
 - New **"Private site" switch** on the Content Pipeline page (user request, to try the plugin on a normal site).

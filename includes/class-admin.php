@@ -213,7 +213,7 @@ final class Admin {
 				'state' => 'warn',
 				'label' => __( 'Note images', 'content-pipeline' ),
 				/* translators: %s: folder path on the server. */
-				'text'  => sprintf( __( 'No private folder next to the site was found, so images are kept in %s with random 32-character names and a "deny" rule. That rule only works on Apache; on Nginx a file whose exact name is known could be opened. On Cloudways this is normally the private_html folder; check it exists and is writable.', 'content-pipeline' ), Files::dir() ),
+				'text'  => sprintf( __( 'Images are switched OFF: no private folder outside the website was found (would be %s, which is inside the website). On Cloudways, make sure the app has a writable private_html folder next to public_html, or set CONTENT_PIPELINE_FILES_DIR in wp-config.php to a folder outside the website.', 'content-pipeline' ), Files::dir() ),
 			);
 		}
 

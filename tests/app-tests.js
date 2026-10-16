@@ -6,6 +6,7 @@
 //      OLLAMA_PORT (fake Ollama port, default 11435), SHOTS (folder for screenshots).
 const PW = process.env.PW || 'playwright';
 const { chromium, devices } = require( PW );
+const { execSync } = require( 'child_process' );
 const fs = require( 'fs' );
 const path = require( 'path' );
 
@@ -258,7 +259,7 @@ async function dialogInput( page, value, button ) {
 	await page.fill( '.cp-editor__body', 'typed while offline' );
 	await page.waitForTimeout( 1500 );
 	ok( 'offline' === await page.getAttribute( '#cp-sync', 'data-state' ), 'indicator shows Offline' );
-	const stored = await page.evaluate( () => window.localStorage.getItem( window.CP_APP.storageKey ) );
+	const stored = await page.evaluate( () => Object.keys( window.localStorage ).filter( ( k ) => k.startsWith( window.CP_APP.storageKey ) ).map( ( k ) => window.localStorage.getItem( k ) ).join( '' ) );
 	ok( stored && stored.includes( 'typed while offline' ), 'offline text kept in this browser' );
 	await page.click( '[aria-label="Close note"]' );
 	await page.click( '.cp-capture__input' );
@@ -510,6 +511,26 @@ async function dialogInput( page, value, button ) {
 		await oc.close();
 	}
 
+	/* ---------------- Images switched off ---------------- */
+	console.log( '== Images switched off (no private folder)' );
+	{
+		const priv = path.join( path.dirname( execSync( 'wp eval "echo untrailingslashit( ABSPATH );"' ).toString().trim() ), 'private_html' );
+		fs.renameSync( priv, priv + '-off' );
+		try {
+			const ic = await browser.newContext( { viewport: { width: 1280, height: 860 } } );
+			const ip = await ic.newPage();
+			await login( ip, 'admin', 'admin' );
+			await ip.waitForSelector( '.cp-shell' );
+			await ip.click( '.cp-capture__input' );
+			await ip.fill( '.cp-editor__title', 'No images here' );
+			await ip.click( 'dialog[open] [aria-label="Add image"]' );
+			ok( await ip.waitForSelector( '.cp-toast:has-text("Images are switched off")', { timeout: 4000 } ).then( () => true, () => false ), 'images off: the image button explains why' );
+			await ic.close();
+		} finally {
+			fs.renameSync( priv + '-off', priv );
+		}
+	}
+
 	/* ---------------- Private site OFF ---------------- */
 	console.log( '== Private site OFF (notes from the dashboard)' );
 	{
@@ -539,7 +560,6 @@ async function dialogInput( page, value, button ) {
 
 	/* ---------------- "Plain" permalinks ---------------- */
 	console.log( '== Plain permalinks (?rest_route=)' );
-	const { execSync } = require( 'child_process' );
 	const permalinks = ( v ) => execSync( 'wp eval \'update_option( "permalink_structure", "' + v + '" ); flush_rewrite_rules( false );\'', { stdio: 'ignore' } );
 	permalinks( '' );
 	try {

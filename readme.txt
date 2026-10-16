@@ -4,7 +4,7 @@ Tags: private, notes, content, workflow
 Requires at least: 6.8
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.3.0
+Stable tag: 0.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -23,6 +23,9 @@ Install on a separate, private WordPress site (the "hub").
 * Ollama test page to check a local AI model on your PC.
 
 == Changelog ==
+
+= 0.3.1 =
+* Fixes from review: simultaneous saves locked per note, unsent edits survive notes deleted elsewhere and multiple tabs, refused saves are kept with Try again, images only stored outside the website.
 
 = 0.3.0 =
 * "Private site" switch: turn the whole-site lock off to try the plugin on a normal site; notes stay private either way.

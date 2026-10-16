@@ -215,17 +215,19 @@ upload "$TMP/a.png" "$ID1"; FID=$(j .file.id)
 call DELETE "notes/$ID1"; call DELETE "notes/$ID1?force=1"
 [ ! -f "$FILES_DIR/$FID.png" ] && ok "deleting a note for good deletes its images" || bad "note delete removes images" "still there"
 
-echo "== Images: fallback without private_html"
+echo "== Images: no private folder = images switched off (nothing stored in the website folder)"
 rm -rf "$PRIVATE"
-FILES_DIR=$(wp eval 'echo ContentPipeline\Files::dir();')
-check "falls back to uploads/content-pipeline-private" "$FILES_DIR" "$WP_DIR/wp-content/uploads/content-pipeline-private"
+PUBLIC_DIR="$WP_DIR/wp-content/uploads/content-pipeline-private"
+BEFORE=$(ls "$PUBLIC_DIR" 2>/dev/null | grep -c '\.png$')
 call POST notes '{"client_id":"testclient0006","title":"Img"}'
 NI=$(j .note.id)
 upload "$TMP/a.png" "$NI"
-FID=$(j .file.id)
-[ -f "$FILES_DIR/.htaccess" ] && [ -f "$FILES_DIR/index.php" ] && grep -q 'Require all denied' "$FILES_DIR/.htaccess" && ok "fallback folder gets index.php and deny-all .htaccess" || bad "fallback guard files" "$(ls -a $FILES_DIR)"
-[[ "$FID" =~ ^[a-f0-9]{32}$ ]] && ok "random 32-character file names" || bad "random names" "$FID"
-curl -4 -s -b "$JAR" "$BASE/wp-admin/admin.php?page=content-pipeline" | grep -q 'only works on Apache' && ok "status page warns about the fallback folder" || bad "status warns about fallback" "no warning"
+check "upload refused with a clear reason" "$CODE/$(j .code)" "409/cp_file_storage"
+check "no image written inside the website folder" "$(ls "$PUBLIC_DIR" 2>/dev/null | grep -c '\.png$')" "$BEFORE"
+curl -4 -s -b "$JAR" "$BASE/wp-admin/admin.php?page=content-pipeline" | grep -q 'Images are switched OFF' && ok "status page says images are switched off" || bad "status page images off" "no message"
+curl -4 -s -b "$JAR" "$BASE/notes/" | grep -q '"images":false' && ok "app is told images are off" || bad "app images flag" "missing"
+mkdir -p "$PRIVATE"
+curl -4 -s -b "$JAR" "$BASE/notes/" | grep -q '"images":true' && ok "with private_html: app is told images are on" || bad "app images flag on" "missing"
 
 echo "== Manifest and app page"
 CODE=$(curl -4 -s -o "$TMP/m" -w '%{http_code}' -b "$JAR" "$BASE/?cp_manifest=1")

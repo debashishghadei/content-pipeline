@@ -188,8 +188,8 @@ final class Api {
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public static function update_note( \WP_REST_Request $request ) {
-		$post = Notes::get( (int) $request['id'] );
+	private static function update_note_locked( \WP_REST_Request $request ) {
+		$post = Notes::fresh( (int) $request['id'] );
 		if ( ! $post ) {
 			return self::missing();
 		}
@@ -272,6 +272,51 @@ final class Api {
 			$data['copy']     = Notes::to_array( $conflict );
 		}
 		return self::no_cache( $data );
+	}
+
+	/**
+	 * Update a note while holding its lock (see update_note_locked()).
+	 *
+	 * Without the lock, two saves made on the same version at the same moment could both
+	 * pass the version check and the later one would silently replace the earlier one.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public static function update_note( \WP_REST_Request $request ) {
+		return self::with_lock( (int) $request['id'], array( __CLASS__, 'update_note_locked' ), $request );
+	}
+
+	/**
+	 * Restore an earlier version while holding the note's lock (see restore_version_locked()).
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public static function restore_version( \WP_REST_Request $request ) {
+		return self::with_lock( (int) $request['id'], array( __CLASS__, 'restore_version_locked' ), $request );
+	}
+
+	/**
+	 * Run a save with the note's lock held. Busy for too long = 503, and the app retries.
+	 *
+	 * @param int              $note_id  Note id.
+	 * @param callable         $callback Save function.
+	 * @param \WP_REST_Request $request  Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	private static function with_lock( int $note_id, callable $callback, \WP_REST_Request $request ) {
+		if ( ! Notes::get( $note_id ) ) {
+			return self::missing();
+		}
+		if ( ! Notes::lock( $note_id ) ) {
+			return new \WP_Error( 'cp_note_busy', __( 'This note is being saved from somewhere else. Trying again shortly.', 'content-pipeline' ), array( 'status' => 503 ) );
+		}
+		try {
+			return call_user_func( $callback, $request );
+		} finally {
+			Notes::unlock( $note_id );
+		}
 	}
 
 	/**
@@ -406,8 +451,8 @@ final class Api {
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public static function restore_version( \WP_REST_Request $request ) {
-		$post     = Notes::get( (int) $request['id'] );
+	private static function restore_version_locked( \WP_REST_Request $request ) {
+		$post     = Notes::fresh( (int) $request['id'] );
 		$rev_id   = (int) $request['rev']; // wp_get_post_revision() takes a variable (by reference).
 		$revision = wp_get_post_revision( $rev_id );
 		if ( ! $post || ! $revision || (int) $revision->post_parent !== $post->ID ) {
