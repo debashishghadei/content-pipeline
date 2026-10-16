@@ -81,6 +81,12 @@ final class Lockdown {
 			return;
 		}
 
+		// Logged in but without hub permission: no wp-admin screens, no admin-ajax, no admin-post.
+		// Logged-out wp-admin requests are sent to the login screen by WordPress itself.
+		if ( is_user_logged_in() && ( is_admin() || wp_doing_ajax() ) ) {
+			self::deny();
+		}
+
 		global $pagenow;
 
 		/**
@@ -104,10 +110,8 @@ final class Lockdown {
 
 		$is_blocked_script = is_string( $pagenow ) && in_array( $pagenow, $blocked, true );
 
-		// admin-ajax.php: block the "nopriv" (logged-out) actions only. Logged-in wp-admin keeps working.
-		$is_public_ajax = wp_doing_ajax() && ! is_user_logged_in();
-
-		if ( $is_blocked_script || $is_public_ajax ) {
+		// Logged-out admin-ajax.php ("nopriv" actions).
+		if ( $is_blocked_script || wp_doing_ajax() ) {
 			self::deny();
 		}
 	}
@@ -167,10 +171,19 @@ final class Lockdown {
 	 */
 	private static function deny(): void {
 		nocache_headers();
+
+		$args = array( 'response' => 403 );
+
+		// Logged in without hub permission: offer a way out to log in as someone else.
+		if ( is_user_logged_in() ) {
+			$args['link_url']  = wp_logout_url( add_query_arg( 'loggedout', 'true', wp_login_url() ) );
+			$args['link_text'] = esc_html__( 'Log out', 'content-pipeline' ); // Not escaped by wp_die().
+		}
+
 		wp_die(
 			esc_html__( 'This site is private.', 'content-pipeline' ),
 			esc_html__( 'Private', 'content-pipeline' ),
-			array( 'response' => 403 )
+			$args // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- link_text escaped above; wp_die() escapes link_url.
 		);
 	}
 

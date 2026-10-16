@@ -34,6 +34,7 @@ final class Plugin {
 		Lockdown::init();
 		App::init();
 		Admin::init();
+		Self_Test::init();
 	}
 
 	/**

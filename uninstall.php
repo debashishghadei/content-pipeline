@@ -8,4 +8,5 @@
 defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 
 delete_option( 'content_pipeline_rules_version' );
+delete_option( 'content_pipeline_self_test' );
 delete_option( 'rewrite_rules' );

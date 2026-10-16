@@ -2,6 +2,14 @@
 
 All notable changes to Content Pipeline Hub. Versions follow semantic versioning (0.x while Phase 1 is built).
 
+## 0.1.1 — 2026-10-16
+
+From ChatGPT's review of 0.1.0 (both points confirmed by test before fixing).
+
+- Fixed: logged-in users without hub permission (e.g. Editor, Subscriber) could open wp-admin (dashboard, Posts screen with draft titles, profile) and use logged-in admin-ajax. Now every wp-admin screen, admin-ajax and admin-post request answers 403 for them, with a "Log out" link. Administrators, login, logout and password recovery are unchanged.
+- Status page: rules are now listed as "Protection enabled" (settings), separate from a new **Live check** that requests the site as a logged-out visitor (home, notes, feed, REST, XML-RPC, robots.txt, noindex header, page-cache signals) and shows Passed / Failed / Needs attention. Shows "Not checked yet" until run.
+- Tests: Subscriber and Editor regression tests across 15 front-end and admin URLs, admin-ajax, admin-post, async-upload, REST (cookie and application password), logout link; admin access, lost-password flow and live check covered.
+
 ## 0.1.0 — 2026-10-16
 
 Milestone 0.1: lockdown.

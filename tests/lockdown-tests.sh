@@ -43,6 +43,9 @@ unzip -q "$ZIP" -d "$WP_DIR/wp-content/plugins/" || { echo "unzip failed"; exit 
 wp plugin activate content-pipeline >/dev/null && ok "activate" || bad "activate" "wp-cli"
 wp rewrite structure '/%postname%/' >/dev/null 2>&1
 wp user get sub1 >/dev/null 2>&1 || wp user create sub1 sub1@example.com --role=subscriber --user_pass=sub1 >/dev/null
+wp user get ed1 >/dev/null 2>&1 || wp user create ed1 ed1@example.com --role=editor --user_pass=ed1 >/dev/null
+[ -n "$(wp post list --post_status=draft --s='SECRET DRAFT TITLE' --format=ids)" ] || wp post create --post_title='SECRET DRAFT TITLE' --post_status=draft --post_author=1 >/dev/null
+wp option delete content_pipeline_self_test >/dev/null 2>&1
 
 echo "== Logged out"
 for p in / /hello-world/ /sample-page/ /notes/ '/?cp_app=1' /feed/ '/?feed=rss2' /comments/feed/ '/?author=1' /author/admin/ /wp-sitemap.xml '/?s=hello' /wp-admin/ /2026/ '/?p=1'; do
@@ -90,7 +93,7 @@ echo "$(hdr X-Robots-Tag)" | grep -q noindex && ok "X-Robots-Tag on app" || bad 
 echo "$(hdr Cache-Control)" | grep -q 'no-store\|no-cache' && ok "app not cached" || bad "app not cached" "$(hdr Cache-Control)"
 $A "$BASE/?cp_app=1"; expect_code "GET /?cp_app=1" 200
 $A "$BASE/hello-world/"; expect_code "GET /hello-world/ (logged in)" 200
-$A "$BASE/wp-admin/admin.php?page=content-pipeline"; expect_code "status page" 200; expect_body "status page content" "Privacy status"
+$A "$BASE/wp-admin/admin.php?page=content-pipeline"; expect_code "status page" 200; expect_body "status page content" "Live check"
 $A "$BASE/wp-admin/plugins.php"; expect_body "Open notes link on Plugins screen" "Open notes"
 $A "$BASE/wp-json/wp/v2/users/me"; expect_code "REST cookie without nonce" 401
 NONCE=$(curl -4 -s -b "$JAR" "$BASE/wp-admin/admin-ajax.php?action=rest-nonce")
@@ -102,13 +105,59 @@ APW=$(wp user application-password create admin test-run --porcelain 2>/dev/null
 curl -4 -s -o "$TMP/body" -D "$TMP/head" -u "admin:$APW" "$BASE/wp-json/wp/v2/users/me"; expect_code "REST with application password" 200
 wp user application-password delete admin --all >/dev/null 2>&1
 
-echo "== Subscriber (logged in, no hub access)"
-login sub1 sub1
-[ "$(loc)" != "$BASE/notes/" ] && ok "subscriber not sent to notes" || bad "subscriber not sent to notes" "$(loc)"
-$A "$BASE/"; expect_code "subscriber GET /" 403; no_leak "subscriber GET /"
-$A "$BASE/notes/"; expect_code "subscriber GET /notes/" 403
-NONCE=$(curl -4 -s -b "$JAR" "$BASE/wp-admin/admin-ajax.php?action=rest-nonce")
-$A -H "X-WP-Nonce: $NONCE" "$BASE/wp-json/wp/v2/users/me"; expect_code "subscriber REST" 403
+echo "== Admin keeps full wp-admin access"
+login admin admin
+$A "$BASE/wp-admin/"; expect_code "admin dashboard" 200
+$A "$BASE/wp-admin/edit.php?post_status=draft"; expect_code "admin Posts screen" 200; expect_body "admin sees drafts" "SECRET DRAFT TITLE"
+$A "$BASE/wp-admin/profile.php"; expect_code "admin profile" 200
+$A "$BASE/wp-admin/post-new.php"; expect_code "admin new post screen" 200
+
+# Users who are logged in but have no hub permission (ChatGPT review of 0.1.0).
+no_access_tests() { # user role
+	local u="$1" r="$2"
+	echo "== $r '$u' (logged in, no hub access)"
+	login "$u" "$u"
+	[ "$(code)" = "302" ] && ok "$r can still log in (302)" || bad "$r can still log in" "$(code)"
+	[ "$(loc)" != "$BASE/notes/" ] && ok "$r not sent to notes" || bad "$r not sent to notes" "$(loc)"
+	for p in / /notes/ '/?cp_app=1' /hello-world/ /wp-admin/ /wp-admin/index.php '/wp-admin/edit.php?post_status=draft' /wp-admin/edit.php /wp-admin/post-new.php /wp-admin/profile.php /wp-admin/upload.php /wp-admin/media-new.php /wp-admin/edit-comments.php /wp-admin/tools.php /wp-admin/admin.php?page=content-pipeline; do
+		$A "$BASE$p"; expect_code "$r GET $p" 403
+		grep -q 'SECRET DRAFT TITLE' "$TMP/body" && bad "$r GET $p leaks draft title" "found" || ok "$r GET $p shows no draft"
+	done
+	$A "$BASE/wp-admin/"; expect_body "$r 403 page offers Log out" "action=logout"
+	$A -X POST --data 'action=heartbeat&_nonce=x&data[wp-refresh-post-lock][post_id]=5' "$BASE/wp-admin/admin-ajax.php"; expect_code "$r POST admin-ajax heartbeat" 403
+	$A "$BASE/wp-admin/admin-ajax.php?action=rest-nonce"; expect_code "$r GET admin-ajax rest-nonce" 403
+	$A -X POST --data 'action=query-attachments' "$BASE/wp-admin/admin-ajax.php"; expect_code "$r POST admin-ajax query-attachments" 403
+	$A -X POST --data 'action=content_pipeline_self_test' "$BASE/wp-admin/admin-post.php"; expect_code "$r POST admin-post" 403
+	$A -X POST "$BASE/wp-admin/async-upload.php"; expect_code "$r POST async-upload" 403
+	$A "$BASE/wp-json/wp/v2/users/me"; expect_code "$r REST cookie without nonce" 401
+	local apw; apw=$(wp user application-password create "$u" test-run --porcelain 2>/dev/null)
+	curl -4 -s -o "$TMP/body" -D "$TMP/head" -u "$u:$apw" "$BASE/wp-json/wp/v2/posts?status=draft"; expect_code "$r REST with application password" 403; no_leak "$r REST with application password"
+	wp user application-password delete "$u" --all >/dev/null 2>&1
+	# Log out using the link on the 403 page.
+	$A "$BASE/wp-admin/"; local out; out=$(grep -o "href='[^']*action=logout[^']*'" "$TMP/body" | head -1 | sed "s/^href='//; s/'$//; s/&#038;/\&/g; s/&amp;/\&/g")
+	curl -4 -s -o /dev/null -D "$TMP/head" -b "$JAR" -c "$JAR" "$out"
+	echo "$(loc)" | grep -q 'loggedout=true' && ok "$r Log out link works" || bad "$r Log out link works" "$(code) $(loc)"
+	$A "$BASE/wp-admin/"; expect_login "$r after logout: wp-admin → login"
+}
+no_access_tests sub1 Subscriber
+no_access_tests ed1 Editor
+
+echo "== Login screen tools still work for visitors"
+$C "$BASE/wp-login.php?action=lostpassword"; expect_code "lost password page" 200; expect_body "lost password form" 'name="user_login"'
+$C -X POST --data 'user_login=admin&wp-submit=Get+New+Password' "$BASE/wp-login.php?action=lostpassword"; [ "$(code)" = "302" ] && echo "$(loc)" | grep -q 'checkemail=confirm' && ok "lost password request accepted" || bad "lost password request accepted" "$(code) $(loc)"
+$C "$BASE/wp-login.php?action=rp&key=x&login=admin"; [ "$(code)" = "302" ] && echo "$(loc)" | grep -q 'wp-login.php' && ok "reset-password link handled by login screen" || bad "reset-password link handled by login screen" "$(code) $(loc)"
+
+echo "== Live check (status page button)"
+login admin admin
+$A "$BASE/wp-admin/admin.php?page=content-pipeline"; expect_body "status page: not checked yet" "Not checked yet"; expect_body "status page: Protection enabled" "Protection enabled"
+SNONCE=$(grep -o 'name="_wpnonce" value="[^"]*"' "$TMP/body" | head -1 | sed 's/.*value="//; s/"//')
+$A -X POST --data "action=content_pipeline_self_test&_wpnonce=$SNONCE&_wp_http_referer=/wp-admin/admin.php?page=content-pipeline" "$BASE/wp-admin/admin-post.php"; [ "$(code)" = "302" ] && ok "live check runs" || bad "live check runs" "$(code)"
+$A -X POST --data "action=content_pipeline_self_test&_wpnonce=bad" "$BASE/wp-admin/admin-post.php"; [ "$(code)" = "403" ] && ok "live check refuses a bad nonce" || bad "live check refuses a bad nonce" "$(code)"
+states=$(wp eval '$l = get_option("content_pipeline_self_test"); foreach ($l["results"] as $r) { echo $r["state"], " ", $r["label"], "\n"; }')
+echo "$states" | sed 's/^/      /'
+n=$(echo "$states" | grep -c .); nok=$(echo "$states" | grep -c '^ok ')
+[ "$n" -eq 8 ] && [ "$nok" -eq 8 ] && ok "live check: 8 of 8 passed" || bad "live check: all passed" "$nok of $n"
+$A "$BASE/wp-admin/admin.php?page=content-pipeline"; expect_body "status page shows last check" "Last checked"; expect_body "status page shows run again" "Run check again"
 
 echo "== Plain permalinks"
 wp rewrite structure '' >/dev/null 2>&1

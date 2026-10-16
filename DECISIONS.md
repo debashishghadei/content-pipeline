@@ -12,3 +12,5 @@ Numbered decisions for Content Pipeline Hub. To change one, add a new line under
 - **D8** — Media Library files are NOT protected before 0.5; the status page warns. 0.5 stores attachments in Cloudways `private_html` behind a login-checked PHP gate (Nginx serves public files directly, so .htaccess is not reliable).
 - **D9** — Proposed for 0.2 (open for review): notes stored as a private custom post type `cp_note` with a private label taxonomy and meta; revisions for earlier versions. Alternative: custom tables.
 - **D10** — Manual updates (upload zip → "Replace current with uploaded"); `Update URI: false` blocks wordpress.org updates.
+- **D11** — (0.1.1, from ChatGPT review) Logged-in users without `cp_use_hub` get 403 everywhere: front-end, REST, every wp-admin screen, admin-ajax and admin-post, with a "Log out" link. Login, logout and password recovery stay open.
+- **D12** — (0.1.1) The status page separates "Protection enabled" (settings) from the "Live check" (verified by requesting the site as a logged-out visitor). Cloudways/cache status counts as unverified until the live check passes on the real server.
