@@ -264,6 +264,7 @@ final class Files {
 			exit;
 		}
 
+		Lockdown::no_page_cache();
 		$ext  = pathinfo( $path, PATHINFO_EXTENSION );
 		$mime = (string) array_search( $ext, self::TYPES, true );
 
@@ -272,6 +273,7 @@ final class Files {
 		header( 'Content-Length: ' . (string) filesize( $path ) );
 		header( 'Cache-Control: private, max-age=31536000, immutable' );
 		header( 'X-Content-Type-Options: nosniff' );
+		header( 'X-Robots-Tag: noindex, nofollow', true );
 		header( "Content-Security-Policy: default-src 'none'; sandbox" );
 		header( 'Content-Disposition: inline; filename="' . $id . '.' . $ext . '"' );
 		readfile( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_readfile -- streams a private image.

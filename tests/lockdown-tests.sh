@@ -169,7 +169,7 @@ $C "$BASE/wp-login.php?action=rp&key=x&login=admin"; [ "$(code)" = "302" ] && ec
 echo "== Live check (status page button)"
 login admin admin
 $A "$BASE/wp-admin/admin.php?page=content-pipeline"; expect_body "status page: not checked yet" "Not checked yet"; expect_body "status page: Protection enabled" "Protection enabled"
-SNONCE=$(grep -o 'name="_wpnonce" value="[^"]*"' "$TMP/body" | head -1 | sed 's/.*value="//; s/"//')
+SNONCE=$(perl -0ne 'print $1 if /value="content_pipeline_self_test".*?name="_wpnonce" value="([^"]+)"/s' "$TMP/body")
 $A -X POST --data "action=content_pipeline_self_test&_wpnonce=$SNONCE&_wp_http_referer=/wp-admin/admin.php?page=content-pipeline" "$BASE/wp-admin/admin-post.php"; [ "$(code)" = "302" ] && ok "live check runs" || bad "live check runs" "$(code)"
 $A -X POST --data "action=content_pipeline_self_test&_wpnonce=bad" "$BASE/wp-admin/admin-post.php"; [ "$(code)" = "403" ] && ok "live check refuses a bad nonce" || bad "live check refuses a bad nonce" "$(code)"
 states=$(wp eval '$l = get_option("content_pipeline_self_test"); foreach ($l["results"] as $r) { echo $r["state"], " ", $r["label"], "\n"; }')
@@ -208,6 +208,64 @@ wp plugin deactivate content-pipeline >/dev/null && wp plugin uninstall content-
 wp option get content_pipeline_rules_version >/dev/null 2>&1 && bad "uninstall removes option" "still there" || ok "uninstall removes option"
 cp -r "$TMP/plugin-copy" "$WP_DIR/wp-content/plugins/content-pipeline"
 wp plugin activate content-pipeline >/dev/null
+
+echo "== Private site OFF (normal website, notes still private)"
+wp option update content_pipeline_private 0 >/dev/null
+$C "$BASE/"; expect_code "off: home page public" 200; [ -z "$(hdr X-Robots-Tag)" ] && ok "off: no noindex header on the website" || bad "off: no noindex header" "$(hdr X-Robots-Tag)"
+$C "$BASE/hello-world/"; expect_code "off: post public" 200; expect_body "off: post content shown" "Hello world"
+$C "$BASE/feed/"; expect_code "off: feed works" 200
+$C "$BASE/wp-json/wp/v2/posts"; expect_code "off: normal REST API works" 200
+$C "$BASE/robots.txt"; grep -q '^Disallow: /$' "$TMP/body" && bad "off: robots.txt normal" "still Disallow: /" || ok "off: robots.txt back to normal"
+$C -X POST -H 'Content-Type: text/xml' --data '<?xml version="1.0"?><methodCall><methodName>system.listMethods</methodName></methodCall>' "$BASE/xmlrpc.php"; expect_code "off: XML-RPC as WordPress normally does" 200
+$C "$BASE/notes/"; expect_login "off: notes app still needs login"; echo "$(hdr X-Robots-Tag)" | grep -q noindex && ok "off: notes app marked noindex" || bad "off: notes noindex" "missing"
+$C "$BASE/?cp_manifest=1"; expect_login "off: manifest still needs login"
+$C "$BASE/?cp_file=00000000000000000000000000000000"; expect_login "off: note images still need login"
+$C "$BASE/wp-json/cp/v1/state"; expect_code "off: notes API still 401" 401
+login admin admin
+echo "$(loc)" | grep -q '/wp-admin/$' && ok "off: admin login goes to the normal Dashboard" || bad "off: admin login goes to Dashboard" "$(loc)"
+$A "$BASE/"; expect_code "off: admin sees the normal home page (no redirect)" 200
+$A "$BASE/notes/"; expect_code "off: admin opens notes" 200; echo "$(hdr X-Robots-Tag)" | grep -q noindex && ok "off: notes page noindex for admin too" || bad "off: notes noindex (admin)" "missing"
+$A "$BASE/wp-admin/edit.php?post_type=cp_note"; expect_code "off: admin sees notes backup list" 200
+$A "$BASE/wp-admin/admin.php?page=content-pipeline"; expect_body "off: status page says OFF" "Private site: OFF"; expect_body "off: status page offers to turn it on" "Turn private site on"
+SNONCE=$(perl -0ne 'print $1 if /value="content_pipeline_self_test".*?name="_wpnonce" value="([^"]+)"/s' "$TMP/body")
+$A -X POST --data "action=content_pipeline_self_test&_wpnonce=$SNONCE&_wp_http_referer=/wp-admin/admin.php?page=content-pipeline" "$BASE/wp-admin/admin-post.php"
+states=$(wp eval '$l = get_option("content_pipeline_self_test"); foreach ($l["results"] as $r) { echo $r["state"], " ", $r["label"], "\n"; }')
+echo "$states" | sed 's/^/      /'
+[ "$(echo "$states" | grep -c '^ok ')" -eq 6 ] && [ "$(echo "$states" | grep -c .)" -eq 6 ] && ok "off: live check tests the notes only, 6 of 6 passed" || bad "off: live check" "$states"
+login ed1 ed1
+$A "$BASE/wp-admin/"; expect_code "off: Editor uses the dashboard normally" 200
+$A "$BASE/wp-admin/edit.php"; expect_code "off: Editor edits posts normally" 200
+$A "$BASE/wp-admin/edit.php?post_type=cp_note"; expect_code "off: Editor cannot list notes" 403; grep -q 'SECRET\|Interview' "$TMP/body" && bad "off: no note titles for Editor" "found" || ok "off: no note titles for Editor"
+$A "$BASE/wp-admin/admin.php?page=content-pipeline"; expect_code "off: Editor cannot open the Content Pipeline page" 403
+$A "$BASE/notes/"; expect_code "off: Editor cannot open notes" 403
+$A "$BASE/?cp_file=00000000000000000000000000000000"; expect_code "off: Editor cannot open note images" 403
+$A -X POST --data 'action=heartbeat&_nonce=x' "$BASE/wp-admin/admin-ajax.php"; [ "$(code)" != "403" ] && ok "off: Editor admin-ajax works ($(code))" || bad "off: Editor admin-ajax" "403"
+EAPW=$(wp user application-password create ed1 cp-test-run --porcelain 2>/dev/null)
+curl -4 -s -o "$TMP/body" -D "$TMP/head" -u "ed1:$EAPW" "$BASE/wp-json/cp/v1/state"; expect_code "off: Editor notes API refused" 403
+curl -4 -s -o "$TMP/body" -D "$TMP/head" -u "ed1:$EAPW" "$BASE/wp-json/wp/v2/posts?status=draft&context=edit"; expect_code "off: Editor normal REST API works" 200
+drop_test_apw ed1
+$A -X POST --data "action=content_pipeline_mode&private=1&_wpnonce=x" "$BASE/wp-admin/admin-post.php"; expect_code "off: Editor cannot flip the switch" 403
+[ "$(wp option get content_pipeline_private)" = "0" ] && ok "off: switch unchanged by Editor" || bad "switch unchanged" "changed"
+
+echo "== Switch on/off from the status page"
+login admin admin
+$A "$BASE/wp-admin/admin.php?page=content-pipeline"
+MNONCE=$(perl -0ne 'print $1 if /value="content_pipeline_mode".*?name="_wpnonce" value="([^"]+)"/s' "$TMP/body")
+$A -X POST --data "action=content_pipeline_mode&private=1&_wpnonce=bad" "$BASE/wp-admin/admin-post.php"; expect_code "switch refuses a bad nonce" 403
+$A -X POST --data "action=content_pipeline_mode&private=1&_wpnonce=$MNONCE&_wp_http_referer=/wp-admin/admin.php?page=content-pipeline" "$BASE/wp-admin/admin-post.php"
+[ "$(code)" = "302" ] && [ "$(wp option get content_pipeline_private)" = "1" ] && ok "switch turns private site on" || bad "switch on" "$(code) $(wp option get content_pipeline_private)"
+wp option get content_pipeline_self_test >/dev/null 2>&1 && bad "old live check cleared after switching" "still there" || ok "old live check cleared after switching"
+$C "$BASE/hello-world/"; expect_login "on again: website private"
+$A "$BASE/wp-admin/admin.php?page=content-pipeline"; expect_body "on: status page says ON" "Private site: ON"
+MNONCE=$(perl -0ne 'print $1 if /value="content_pipeline_mode".*?name="_wpnonce" value="([^"]+)"/s' "$TMP/body")
+$A -X POST --data "action=content_pipeline_mode&private=0&_wpnonce=$MNONCE" "$BASE/wp-admin/admin-post.php"
+[ "$(wp option get content_pipeline_private)" = "0" ] && ok "switch turns private site off" || bad "switch off" "$(wp option get content_pipeline_private)"
+echo "<?php define( 'CONTENT_PIPELINE_PRIVATE', true );" > "$WP_DIR/wp-content/mu-plugins/rig-cp-private.php"
+$C "$BASE/hello-world/"; expect_login "wp-config constant forces private on"
+$A "$BASE/wp-admin/admin.php?page=content-pipeline"; expect_body "status page says the switch is fixed in wp-config.php" "fixed in wp-config.php"
+rm -f "$WP_DIR/wp-content/mu-plugins/rig-cp-private.php"
+wp option update content_pipeline_private 1 >/dev/null
+$C "$BASE/hello-world/"; expect_login "back to private"
 
 echo "== PHP log"
 if [ -s "$LOG" ]; then bad "debug.log empty" "$(head -5 $LOG)"; else ok "debug.log empty (E_ALL)"; fi

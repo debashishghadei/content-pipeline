@@ -24,3 +24,5 @@ Numbered decisions for Content Pipeline Hub. To change one, add a new line under
 - **D20** — (0.2.0) Note text is stored exactly as typed (HTML filter paused during app saves) and always displayed as text (textContent / esc_*), never as HTML.
 - **D21** — (0.2.0) Uninstall keeps notes, folders and images (deleting the plugin by mistake must not delete notes).
 - **D22** — (0.2.0) Google Keep import and Markdown export are postponed (user adds notes by hand for now).
+- **D23** — (0.3.0, user request) "Private site" switch: ON by default (missing option = ON). OFF = normal website, only the notes (app page, manifest, images, notes API) stay private. `CONTENT_PIPELINE_PRIVATE` in wp-config.php overrides the switch.
+- **D24** — (0.3.0) Notes use their own capability type (`cp_note`/`cp_notes`, granted to administrators at runtime) and folders require `cp_use_hub`, so being able to edit posts never means being able to read notes.

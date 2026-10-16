@@ -3,16 +3,17 @@
 Read this first when starting a new chat (Claude or ChatGPT). Update it at the end of every chat/milestone.
 
 ## Current state (16 Oct 2026)
-- Version: **0.2.0** — the private hub (lockdown, 0.1.x) plus the notes app (Phase 1 except Google Keep import). Built and tested in the sandbox; not yet installed on the real hub.
+- Version: **0.3.0** — the private hub (lockdown, 0.1.x), the notes app (0.2.0, Phase 1 except Google Keep import) and the "Private site" switch (0.3.0: OFF = normal website, notes still private; for trying it on the Madhu Infotech test site). Built and tested in the sandbox; not yet installed on a real site.
 - Review history: ChatGPT reviewed 0.1.0 (2 points, both confirmed and fixed in 0.1.1) and 0.1.1 (live check could miss a cache; confirmed, fixed in 0.1.2). ChatGPT recommends continuing with this plugin only.
-- Full plan: project note "content-pipeline.md" (Claude project "Tools"); decisions in `DECISIONS.md` (D1–D22).
+- Full plan: project note "content-pipeline.md" (Claude project "Tools"); decisions in `DECISIONS.md` (D1–D24).
 
-## What the app does (0.2.0)
+## What the app does (0.2.0+)
 - Notes with title, text, checklist, pin, status (Idea → Outline ready → Draft ready → Ready → Published), images.
 - Folders like Windows Explorer (D14): Inbox + 4 website folders seeded (D15); nested folders; tree, tiles, breadcrumb; move by menu or drag and drop.
 - Search (all folders or current folder), status filter, trash (30 days), history (D17), conflict copies (D18).
 - Offline-safe saving via localStorage queue (D19); nonce renewal; logged-out banner.
 - Protected images (`Files`), Ollama test page (`Ollama`).
+- "Private site" switch (D23): option `content_pipeline_private` ('0' = off), constant `CONTENT_PIPELINE_PRIVATE` overrides. `Plugin::is_private()`; `Lockdown::init()` registers the whole-site rules only when ON; `front_gate()` guards only notes requests when OFF.
 
 ## Files
 - `content-pipeline.php` — header, constants, loads classes.
@@ -32,10 +33,10 @@ Read this first when starting a new chat (Claude or ChatGPT). Update it at the e
 - `tests/cache-sim-tests.sh` — live check vs a misconfigured cache.
 - `tests/notes-api-tests.sh` — API, folders, history, trash, images, uninstall keeps notes.
 - `tests/app-tests.sh` — browser tests with Playwright/Chromium: desktop, phone, dark mode, plain permalinks, Ollama page with a fake Ollama. Needs `PW=<playwright path>`.
-- Results for 0.2.0: `tests/reports/TEST-REPORT-0.2.0.md`.
+- Results: `tests/reports/TEST-REPORT-0.3.0.md` (and earlier reports).
 
 ## Next
-- User: install 0.2.0 on a test site or the hub (SSL on, Varnish off, Permalinks "Post name"), press "Run check now", use the app on the Android phone for a few days, send feedback.
+- User: install 0.3.0 on the Madhu Infotech test site with the switch OFF (or on the hub with it ON: SSL on, Varnish off, Permalinks "Post name"), press "Run check now", use the app on the Android phone for a few days, send feedback.
 - Then Phase 2 (article workspace: Copy prompt / Paste result, prompts + style per site, Check), or Keep import if wanted first.
 
 ## Open issues / not tested

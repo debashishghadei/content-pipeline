@@ -1,6 +1,11 @@
 <?php
 /**
- * Lockdown: the whole site is private. Logged-out visitors only get the login screen.
+ * Lockdown.
+ *
+ * "Private site" ON (default, for the hub): the whole site is private; logged-out visitors
+ * only get the login screen.
+ * "Private site" OFF (for trying the plugin on a normal site): the website works as usual;
+ * only the notes (app page, manifest, images, notes API) stay private.
  *
  * @package ContentPipeline
  */
@@ -23,14 +28,19 @@ final class Lockdown {
 	 * Hook everything up.
 	 */
 	public static function init(): void {
+		// Front end: the whole site (private mode) or only the notes pages (normal mode).
+		add_action( 'template_redirect', array( __CLASS__, 'front_gate' ), -100 );
+
+		if ( ! Plugin::is_private() ) {
+			// Normal site: nothing else changes. The notes API checks permission per route.
+			return;
+		}
+
 		// Every response: tell search engines not to index anything.
 		add_action( 'init', array( __CLASS__, 'send_noindex_header' ), 0 );
 
 		// Direct PHP entry points that skip the normal page flow.
 		add_action( 'init', array( __CLASS__, 'block_side_doors' ), 1 );
-
-		// All front-end pages, feeds, sitemaps, author archives and search.
-		add_action( 'template_redirect', array( __CLASS__, 'front_gate' ), -100 );
 
 		// REST API (wp-json and ?rest_route=): runs after core's cookie/nonce check (priority 100).
 		add_filter( 'rest_authentication_errors', array( __CLASS__, 'rest_gate' ), 101 );
@@ -125,6 +135,17 @@ final class Lockdown {
 			return;
 		}
 
+		if ( ! Plugin::is_private() ) {
+			if ( ! self::is_notes_request() ) {
+				return; // Normal site: every other page is public as usual.
+			}
+			// The notes pages stay private and out of search engines and page caches.
+			if ( ! headers_sent() ) {
+				header( 'X-Robots-Tag: noindex, nofollow', true );
+			}
+			self::no_page_cache();
+		}
+
 		if ( ! is_user_logged_in() ) {
 			nocache_headers();
 			auth_redirect(); // Sends the visitor to the login screen and exits.
@@ -133,6 +154,22 @@ final class Lockdown {
 
 		if ( ! current_user_can( Plugin::CAP ) ) {
 			self::deny();
+		}
+	}
+
+	/**
+	 * Is this a request for the notes app, its manifest or a note image?
+	 */
+	public static function is_notes_request(): bool {
+		return (bool) ( get_query_var( App::QUERY_VAR ) || get_query_var( App::MANIFEST_VAR ) || get_query_var( Files::QUERY_VAR ) );
+	}
+
+	/**
+	 * Ask page-cache plugins not to store this response.
+	 */
+	public static function no_page_cache(): void {
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- standard constant read by cache plugins.
 		}
 	}
 

@@ -86,7 +86,7 @@ final class App {
 			exit;
 		}
 
-		if ( is_front_page() && ! is_paged() ) {
+		if ( Plugin::is_private() && is_front_page() && ! is_paged() ) {
 			wp_safe_redirect( self::url() );
 			exit;
 		}
@@ -97,6 +97,7 @@ final class App {
 	 * The page links it with crossorigin="use-credentials", so the login cookie is sent.
 	 */
 	private static function manifest(): void {
+		Lockdown::no_page_cache();
 		$icons = CONTENT_PIPELINE_URL . 'assets/icons/';
 		$data  = array(
 			'name'             => sprintf( '%s · %s', __( 'Notes', 'content-pipeline' ), get_bloginfo( 'name' ) ),
@@ -144,7 +145,9 @@ final class App {
 	 * Output the app page. It does not use the theme.
 	 */
 	private static function render(): void {
+		Lockdown::no_page_cache();
 		nocache_headers();
+		header( 'X-Robots-Tag: noindex, nofollow', true );
 		status_header( 200 );
 		header( 'Content-Type: text/html; charset=' . get_option( 'blog_charset' ) );
 

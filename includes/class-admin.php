@@ -26,6 +26,32 @@ final class Admin {
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ) );
 		add_action( 'admin_bar_menu', array( __CLASS__, 'admin_bar' ), 35 );
 		add_filter( 'plugin_action_links_' . plugin_basename( CONTENT_PIPELINE_FILE ), array( __CLASS__, 'action_links' ) );
+		add_action( 'admin_post_' . self::MODE_ACTION, array( __CLASS__, 'save_mode' ) );
+	}
+
+	/**
+	 * The admin-post action and nonce for the "Private site" switch.
+	 */
+	public const MODE_ACTION = 'content_pipeline_mode';
+
+	/**
+	 * Save the "Private site" switch.
+	 */
+	public static function save_mode(): void {
+		if ( ! current_user_can( Plugin::CAP ) ) {
+			wp_die( esc_html__( 'You do not have access to this hub.', 'content-pipeline' ), '', array( 'response' => 403 ) );
+		}
+		check_admin_referer( self::MODE_ACTION );
+
+		if ( ! Plugin::private_is_fixed() ) {
+			$on = isset( $_POST['private'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['private'] ) );
+			update_option( Plugin::PRIVATE_OPTION, $on ? '1' : '0', true );
+			// The last live check tested the other mode.
+			delete_option( Self_Test::OPTION );
+		}
+
+		wp_safe_redirect( admin_url( 'admin.php?page=' . self::PAGE . '&cp_mode=saved' ) );
+		exit;
 	}
 
 	/**
@@ -40,6 +66,16 @@ final class Admin {
 			array( __CLASS__, 'render_status' ),
 			'dashicons-lightbulb',
 			3
+		);
+		// First item in the submenu (the notes backup list is added earlier by WordPress).
+		add_submenu_page(
+			self::PAGE,
+			__( 'Content Pipeline', 'content-pipeline' ),
+			__( 'Status & privacy', 'content-pipeline' ),
+			Plugin::CAP,
+			self::PAGE,
+			array( __CLASS__, 'render_status' ),
+			0
 		);
 	}
 
@@ -82,6 +118,27 @@ final class Admin {
 	 * @return array<int, array{label: string, text: string}>
 	 */
 	public static function protections(): array {
+		if ( ! Plugin::is_private() ) {
+			return array(
+				array(
+					'label' => __( 'Your notes', 'content-pipeline' ),
+					'text'  => __( 'The notes page, its app manifest, note images and the notes API need an administrator login. Visitors are sent to the login screen; other accounts get "This site is private".', 'content-pipeline' ),
+				),
+				array(
+					'label' => __( 'Notes in the dashboard', 'content-pipeline' ),
+					'text'  => __( 'Only administrators can see notes and folders in wp-admin (Editors cannot, even though they can edit posts).', 'content-pipeline' ),
+				),
+				array(
+					'label' => __( 'Search engines', 'content-pipeline' ),
+					'text'  => __( 'The notes pages are marked "noindex" and are not cached by page-cache plugins.', 'content-pipeline' ),
+				),
+				array(
+					'label' => __( 'Rest of the website', 'content-pipeline' ),
+					'text'  => __( 'Unchanged: public pages, comments, feeds, sitemaps, search engines, other users and login work as before.', 'content-pipeline' ),
+				),
+			);
+		}
+
 		return array(
 			array(
 				'label' => __( 'Private site', 'content-pipeline' ),
@@ -184,6 +241,8 @@ final class Admin {
 				<a class="button button-primary" href="<?php echo esc_url( App::url() ); ?>"><?php esc_html_e( 'Open notes', 'content-pipeline' ); ?></a>
 			</p>
 
+			<?php self::render_mode(); ?>
+
 			<h2><?php esc_html_e( 'Live check', 'content-pipeline' ); ?></h2>
 			<p><?php esc_html_e( 'The server opens this site like a logged-out visitor and shows what really came back. Run it after installing, after changing caching, and after moving the site.', 'content-pipeline' ); ?></p>
 			<?php if ( null === $last ) : ?>
@@ -235,6 +294,61 @@ final class Admin {
 				echo esc_html( sprintf( __( 'Version %s', 'content-pipeline' ), CONTENT_PIPELINE_VERSION ) );
 				?>
 			</p>
+		</div>
+		<?php
+	}
+
+	/**
+	 * The "Private site" switch.
+	 */
+	private static function render_mode(): void {
+		$private = Plugin::is_private();
+		?>
+		<div class="card" style="max-width:900px;margin:16px 0;padding:12px 18px" id="cp-mode">
+			<h2 style="margin-top:6px">
+				<?php
+				echo esc_html(
+					$private
+						? __( 'Private site: ON', 'content-pipeline' )
+						: __( 'Private site: OFF', 'content-pipeline' )
+				);
+				?>
+			</h2>
+			<p>
+				<?php
+				echo esc_html(
+					$private
+						? __( 'The whole website is private: visitors only see the login screen, and you land on your notes after login. Use this on your private hub.', 'content-pipeline' )
+						: __( 'The website works normally for everyone. Only your notes are private (administrators only). Use this to try the plugin on a normal site.', 'content-pipeline' )
+				);
+				?>
+			</p>
+			<?php if ( Plugin::private_is_fixed() ) : ?>
+				<p class="description"><?php esc_html_e( 'This is fixed in wp-config.php (CONTENT_PIPELINE_PRIVATE), so it cannot be changed here.', 'content-pipeline' ); ?></p>
+			<?php else : ?>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="<?php echo esc_attr( self::MODE_ACTION ); ?>">
+					<input type="hidden" name="private" value="<?php echo esc_attr( $private ? '0' : '1' ); ?>">
+					<?php wp_nonce_field( self::MODE_ACTION ); ?>
+					<?php
+					submit_button(
+						$private ? __( 'Turn private site off', 'content-pipeline' ) : __( 'Turn private site on', 'content-pipeline' ),
+						$private ? 'secondary' : 'primary',
+						'submit',
+						false
+					);
+					?>
+				</form>
+				<p class="description">
+					<?php
+					echo esc_html(
+						$private
+							? __( 'Turning it off makes the rest of the website public again. Your notes stay private. If a page cache is used, purge it afterwards.', 'content-pipeline' )
+							: __( 'Turning it on hides the whole website behind the login screen. Purge any page cache afterwards, then run the live check.', 'content-pipeline' )
+					);
+					?>
+				</p>
+			<?php endif; ?>
 		</div>
 		<?php
 	}

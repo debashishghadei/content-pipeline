@@ -71,11 +71,23 @@ final class Self_Test {
 		$seen     = array();
 		$differed = false;
 
-		$pages = array(
-			array( __( 'Home page', 'content-pipeline' ), home_url( '/' ) ),
-			array( __( 'Notes app', 'content-pipeline' ), App::url() ),
-			array( __( 'Feed', 'content-pipeline' ), home_url( '/?feed=rss2' ) ),
-		);
+		$private = Plugin::is_private();
+
+		if ( $private ) {
+			$pages = array(
+				array( __( 'Home page', 'content-pipeline' ), home_url( '/' ) ),
+				array( __( 'Notes app', 'content-pipeline' ), App::url() ),
+				array( __( 'Feed', 'content-pipeline' ), home_url( '/?feed=rss2' ) ),
+			);
+		} else {
+			// Normal site: only the notes must be private. Any well-formed image id is
+			// enough here: the login check runs before the file is looked up.
+			$pages = array(
+				array( __( 'Notes app', 'content-pipeline' ), App::url() ),
+				array( __( 'App manifest', 'content-pipeline' ), App::manifest_url() ),
+				array( __( 'Note images', 'content-pipeline' ), Files::url( str_repeat( '0', 32 ) ) ),
+			);
+		}
 		foreach ( $pages as $page ) {
 			$plain     = array( self::request( $page[1] ), self::request( $page[1] ) );
 			$fresh     = self::request( $page[1], 'GET', '', true );
@@ -85,27 +97,35 @@ final class Self_Test {
 			$results[] = array_intersect_key( $row, array_flip( array( 'state', 'label', 'text' ) ) );
 		}
 
-		$rest      = array( self::request( rest_url( 'wp/v2/users' ) ), self::request( rest_url( 'wp/v2/users' ) ) );
-		$seen      = array_merge( $seen, $rest );
-		$results[] = self::expect_code( __( 'REST API (users list)', 'content-pipeline' ), $rest, 401 );
-
-		$xmlrpc    = self::request(
-			site_url( 'xmlrpc.php' ),
-			'POST',
-			'<?xml version="1.0"?><methodCall><methodName>system.listMethods</methodName></methodCall>'
-		);
-		$results[] = self::expect_code( __( 'XML-RPC', 'content-pipeline' ), array( $xmlrpc ), 403 );
-
-		$robots = self::request( home_url( '/robots.txt' ) );
-		if ( is_wp_error( $robots ) ) {
-			$results[] = self::unreachable( __( 'robots.txt', 'content-pipeline' ), $robots );
+		if ( $private ) {
+			$rest      = array( self::request( rest_url( 'wp/v2/users' ) ), self::request( rest_url( 'wp/v2/users' ) ) );
+			$seen      = array_merge( $seen, $rest );
+			$results[] = self::expect_code( __( 'REST API (users list)', 'content-pipeline' ), $rest, 401 );
 		} else {
-			$ok        = 200 === wp_remote_retrieve_response_code( $robots ) && preg_match( '/^Disallow:\s*\/\s*$/m', wp_remote_retrieve_body( $robots ) );
-			$results[] = array(
-				'state' => $ok ? 'ok' : 'fail',
-				'label' => __( 'robots.txt', 'content-pipeline' ),
-				'text'  => $ok ? __( 'Asks all crawlers to stay out.', 'content-pipeline' ) : __( 'Does not say "Disallow: /". A real robots.txt file in the site folder may be overriding WordPress; delete it.', 'content-pipeline' ),
+			$rest      = array( self::request( rest_url( Api::NS . '/state' ) ), self::request( rest_url( Api::NS . '/state' ) ) );
+			$seen      = array_merge( $seen, $rest );
+			$results[] = self::expect_code( __( 'Notes API', 'content-pipeline' ), $rest, 401 );
+		}
+
+		if ( $private ) {
+			$xmlrpc    = self::request(
+				site_url( 'xmlrpc.php' ),
+				'POST',
+				'<?xml version="1.0"?><methodCall><methodName>system.listMethods</methodName></methodCall>'
 			);
+			$results[] = self::expect_code( __( 'XML-RPC', 'content-pipeline' ), array( $xmlrpc ), 403 );
+
+			$robots = self::request( home_url( '/robots.txt' ) );
+			if ( is_wp_error( $robots ) ) {
+				$results[] = self::unreachable( __( 'robots.txt', 'content-pipeline' ), $robots );
+			} else {
+				$ok        = 200 === wp_remote_retrieve_response_code( $robots ) && preg_match( '/^Disallow:\s*\/\s*$/m', wp_remote_retrieve_body( $robots ) );
+				$results[] = array(
+					'state' => $ok ? 'ok' : 'fail',
+					'label' => __( 'robots.txt', 'content-pipeline' ),
+					'text'  => $ok ? __( 'Asks all crawlers to stay out.', 'content-pipeline' ) : __( 'Does not say "Disallow: /". A real robots.txt file in the site folder may be overriding WordPress; delete it.', 'content-pipeline' ),
+				);
+			}
 		}
 
 		$home = $seen[0];

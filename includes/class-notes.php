@@ -100,7 +100,7 @@ final class Notes {
 				'can_export'          => true,
 				'delete_with_user'    => false,
 				'supports'            => array( 'title', 'editor', 'revisions' ),
-				'capability_type'     => 'post',
+				'capability_type'     => array( 'cp_note', 'cp_notes' ),
 				'map_meta_cap'        => true,
 			)
 		);
@@ -121,6 +121,12 @@ final class Notes {
 				'show_admin_column'  => true,
 				'rewrite'            => false,
 				'query_var'          => false,
+				'capabilities'       => array(
+					'manage_terms' => Plugin::CAP,
+					'edit_terms'   => Plugin::CAP,
+					'delete_terms' => Plugin::CAP,
+					'assign_terms' => Plugin::CAP,
+				),
 			)
 		);
 	}

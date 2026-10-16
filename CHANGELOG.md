@@ -2,6 +2,17 @@
 
 All notable changes to Content Pipeline Hub. Versions follow semantic versioning (0.x while Phase 1 is built).
 
+## 0.3.0 — 2026-10-16
+
+- New **"Private site" switch** on the Content Pipeline page (user request, to try the plugin on a normal site).
+  - **ON** (default, for the hub): unchanged — the whole site is private.
+  - **OFF**: the website works normally for everyone (pages, blog, comments, feeds, sitemaps, REST API, XML-RPC, search engines, Editors in wp-admin, normal login to the Dashboard, no home → notes redirect). **The notes stay private**: notes page, manifest, note images and notes API need an administrator; they are marked noindex and not page-cached (`DONOTCACHEPAGE`).
+  - Can be fixed in wp-config.php with `define( 'CONTENT_PIPELINE_PRIVATE', true );` (or false); the page then shows it cannot be changed there.
+  - Switching clears the last live check; the live check tests the notes only when the switch is OFF (6 checks) and the whole site when ON (8 checks).
+- Notes and folders now have their own permissions (administrators only), so Editors cannot see notes in wp-admin even when the site is public.
+- Admin menu: "Content Pipeline" opens the status page first ("Status & privacy").
+- Tests: switch ON/OFF/fixed-by-constant, Editor in OFF mode, live check in OFF mode, browser test of the app from the Dashboard with the site public.
+
 ## 0.2.0 — 2026-10-16
 
 The notes app (Phase 1, built in one go; Google Keep import left for later).

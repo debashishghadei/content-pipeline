@@ -510,6 +510,33 @@ async function dialogInput( page, value, button ) {
 		await oc.close();
 	}
 
+	/* ---------------- Private site OFF ---------------- */
+	console.log( '== Private site OFF (notes from the dashboard)' );
+	{
+		const { execSync: ex } = require( 'child_process' );
+		ex( 'wp option update content_pipeline_private 0', { stdio: 'ignore' } );
+		try {
+			const oc = await browser.newContext( { viewport: { width: 1280, height: 860 } } );
+			const o = await oc.newPage();
+			const oerr = [];
+			o.on( 'pageerror', ( e ) => oerr.push( e.message ) );
+			await login( o, 'admin', 'admin' );
+			ok( o.url().includes( '/wp-admin/' ), 'off: login goes to the Dashboard', o.url() );
+			await o.goto( BASE + '/' );
+			ok( o.url() === BASE + '/', 'off: home page stays the normal website', o.url() );
+			await o.click( '#wp-admin-bar-content-pipeline-notes a' );
+			await o.waitForSelector( '.cp-shell' );
+			ok( o.url() === BASE + '/notes/', 'off: "Notes" link in the admin bar opens the app' );
+			await newNote( o, 'Made while the site is public', 'still private' );
+			st = await serverState( o );
+			ok( !! findNote( st, 'Made while the site is public' ), 'off: notes save normally' );
+			ok( 0 === oerr.length, 'off: no JavaScript errors', oerr.join( ' | ' ) );
+			await oc.close();
+		} finally {
+			ex( 'wp option update content_pipeline_private 1', { stdio: 'ignore' } );
+		}
+	}
+
 	/* ---------------- "Plain" permalinks ---------------- */
 	console.log( '== Plain permalinks (?rest_route=)' );
 	const { execSync } = require( 'child_process' );

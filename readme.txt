@@ -4,7 +4,7 @@ Tags: private, notes, content, workflow
 Requires at least: 6.8
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.2.0
+Stable tag: 0.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -14,7 +14,7 @@ Private content hub: capture ideas and turn them into articles for your sites.
 
 Install on a separate, private WordPress site (the "hub").
 
-* The whole site is private: logged-out visitors only see the login screen.
+* "Private site" ON (default): the whole site is private; logged-out visitors only see the login screen. OFF: the website works normally and only your notes are private.
 * REST API, feeds, sitemaps, author pages, comments, XML-RPC and sign-ups are blocked.
 * Search engines are told not to index anything.
 * After login you land on the notes app (/notes/): notes with checklists, Explorer-style folders, search, pin, status, trash, history, protected images.
@@ -23,6 +23,9 @@ Install on a separate, private WordPress site (the "hub").
 * Ollama test page to check a local AI model on your PC.
 
 == Changelog ==
+
+= 0.3.0 =
+* "Private site" switch: turn the whole-site lock off to try the plugin on a normal site; notes stay private either way.
 
 = 0.2.0 =
 * Notes app with folders, search, autosave/offline saving, conflict copies, history, trash, protected images, phone layout, Ollama test page.
