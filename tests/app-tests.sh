@@ -2,7 +2,7 @@
 # Browser tests for the notes app.
 #
 # DISPOSABLE TEST SITES ONLY: deletes ALL notes, folders and note images on the test site
-# first, then runs tests/app-tests.js and tests/review-030-app.js (Playwright + Chromium)
+# (and articles) first, then runs the browser test files (Playwright + Chromium)
 # with two fake Ollama servers. Creates a private_html folder next to the site for images.
 #
 # Usage: CP_TEST_DISPOSABLE=1 tests/app-tests.sh
@@ -16,7 +16,7 @@ export OLLAMA_BLOCKED_PORT="${OLLAMA_BLOCKED_PORT:-11436}"
 
 echo "== Reset notes on the test site"
 wp eval '
-foreach ( get_posts( array( "post_type" => "cp_note", "post_status" => "any,trash", "posts_per_page" => -1, "fields" => "ids" ) ) as $id ) { wp_delete_post( $id, true ); }
+foreach ( get_posts( array( "post_type" => array( "cp_note", "cp_article" ), "post_status" => "any,trash", "posts_per_page" => -1, "fields" => "ids" ) ) as $id ) { wp_delete_post( $id, true ); }
 foreach ( get_terms( array( "taxonomy" => "cp_folder", "hide_empty" => false, "fields" => "ids" ) ) as $t ) { wp_delete_term( $t, "cp_folder" ); }
 delete_option( "content_pipeline_inbox" ); delete_option( "content_pipeline_seeded" );
 ContentPipeline\Notes::maybe_seed();
@@ -42,4 +42,10 @@ node "$DIR/review-031-app.js"; R3=$?
 echo
 echo "== Same-tab record changes when storage fails (ChatGPT review of 0.3.2)"
 node "$DIR/review-032-app.js"; R4=$?
-[ "$R1" -eq 0 ] && [ "$R2" -eq 0 ] && [ "$R3" -eq 0 ] && [ "$R4" -eq 0 ]
+echo
+echo "== Article workspace (0.4)"
+node "$DIR/article-app.js"; R5=$?
+echo
+echo "== Converter and block validity (0.4)"
+node "$DIR/blocks-tests.js"; R6=$?
+[ "$R1" -eq 0 ] && [ "$R2" -eq 0 ] && [ "$R3" -eq 0 ] && [ "$R4" -eq 0 ] && [ "$R5" -eq 0 ] && [ "$R6" -eq 0 ]

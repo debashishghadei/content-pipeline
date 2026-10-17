@@ -152,7 +152,7 @@
 			if ( ! isOffline( err ) ) {
 				reportError( err );
 			}
-			return null;
+			return siteCache.get( folder ) || null; // Offline: the copy loaded earlier, if any.
 		}
 	}
 
@@ -370,9 +370,10 @@
 		toast( 'Answer pasted.' );
 	}
 
-	function versionsButton( art, field, onRestore ) {
+	function versionsButton( art, field, onRestore, label ) {
 		const n = ( fieldOf( art, field ).versions || [] ).length;
-		return h( 'button', { type: 'button', class: 'cp-btn', disabled: ! n, dataset: { versions: field }, onClick: () => showVersions( art, field, onRestore ) }, icon( 'history' ), 'Earlier versions' + ( n ? ' (' + n + ')' : '' ) );
+		const name = label || 'Earlier versions';
+		return h( 'button', { type: 'button', class: 'cp-btn', disabled: ! n, dataset: { versions: field, label: name }, onClick: () => showVersions( art, field, onRestore ) }, icon( 'history' ), name + ( n ? ' (' + n + ')' : '' ) );
 	}
 
 	function preview( value ) {
@@ -419,6 +420,22 @@
 		}
 	}
 
+	/**
+	 * Show the prompt for a step. Always uses the latest writing settings of the article's
+	 * website (fetched now; the saved copy is used only when offline).
+	 *
+	 * @param {Object} art   Article.
+	 * @param {string} step  Prompt step.
+	 * @param {string} title Dialog title.
+	 * @param {Object} extra Extra data (section).
+	 */
+	async function showPrompt( art, step, title, extra ) {
+		if ( false !== navigator.onLine ) {
+			await loadSettings( art.site || 0, true );
+		}
+		promptDialog( title || 'Prompt', buildPrompt( art, step, extra ) );
+	}
+
 	function stepActions( art, step, field, opts ) {
 		opts = opts || {};
 		return h( 'div', { class: 'cp-actions' },
@@ -426,7 +443,7 @@
 				if ( opts.before && false === opts.before() ) {
 					return;
 				}
-				promptDialog( opts.promptTitle || 'Prompt', buildPrompt( art, step, opts.extra ) );
+				showPrompt( art, step, opts.promptTitle, opts.extra );
 			} }, icon( 'copy' ), 'Copy prompt' ),
 			h( 'button', { type: 'button', class: 'cp-btn', onClick: () => pasteAnswer( art, field, opts.afterPaste ) }, icon( 'paste' ), 'Paste answer' ),
 			versionsButton( art, field, opts.onRestore )
@@ -568,7 +585,7 @@
 				} ),
 				fieldBox( art, 'outline_text', { rows: 8, placeholder: 'Paste the outline here. Each section starts with "## Heading", then "Brief:" and "Words:" lines.', label: 'Outline text' } ),
 				h( 'div', { class: 'cp-actions' }, h( 'button', { type: 'button', class: 'cp-btn', onClick: () => readFromText( String( val( art, 'outline_text', '' ) ), true ) }, icon( 'refresh' ), 'Read sections from the text' ),
-					versionsButton( art, 'outline', () => renderStep() ) ),
+					versionsButton( art, 'outline', () => renderStep(), 'Earlier section lists' ) ),
 				list,
 				approveBox,
 			] );
@@ -723,7 +740,7 @@
 							toast( 'Write the article first.' );
 							return;
 						}
-						promptDialog( 'Prompt: SEO fields', buildPrompt( art, 'seo' ) );
+						showPrompt( art, 'seo', 'Prompt: SEO fields' );
 					} }, icon( 'copy' ), 'Copy prompt' ),
 					h( 'button', { type: 'button', class: 'cp-btn', onClick: async () => {
 						let text = null;
@@ -1047,7 +1064,7 @@
 			// Version counts may have changed.
 			WS.el.panel.querySelectorAll( 'button[data-versions]' ).forEach( ( b ) => {
 				const n = ( fieldOf( art, b.dataset.versions ).versions || [] ).length;
-				b.lastChild.textContent = 'Earlier versions' + ( n ? ' (' + n + ')' : '' );
+				b.lastChild.textContent = ( b.dataset.label || 'Earlier versions' ) + ( n ? ' (' + n + ')' : '' );
 				b.disabled = ! n;
 			} );
 		}
@@ -1087,7 +1104,7 @@
 			}
 			inner.appendChild( h( 'ul', { class: 'cp-rows' }, shown.map( ( a ) => {
 				const note = S.notes.get( A.noteKey( a.note ) );
-				return h( 'li', { class: 'cp-row cp-row--link', tabindex: '0', role: 'link', onClick: () => go( 'article', a.id ), onKeydown: ( e ) => {
+				return h( 'li', { class: 'cp-row cp-row--link', tabindex: '0', role: 'link', dataset: { id: String( a.id ) }, onClick: () => go( 'article', a.id ), onKeydown: ( e ) => {
 					if ( 'Enter' === e.key ) {
 						go( 'article', a.id );
 					}
@@ -1127,6 +1144,8 @@
 				settingsForm( holder, folder, payload );
 			} );
 		},
+		// Never redrawn while open (background saves must not wipe what you typed).
+		update() {},
 	};
 
 	let settingsDirty = false;
@@ -1139,6 +1158,9 @@
 
 	function settingsForm( holder, folder, payload ) {
 		const st = clone( payload.settings );
+		if ( ! st.prompts || Array.isArray( st.prompts ) ) {
+			st.prompts = {}; // Custom prompts are keyed by step.
+		}
 		settingsDirty = false;
 		const status = h( 'span', { class: 'cp-scope cp-settings__status' } );
 		const markDirty = () => {
@@ -1265,6 +1287,9 @@
 				siteCache.set( folder, data );
 				payload.settings = data.settings;
 				Object.assign( st, clone( data.settings ) );
+				if ( ! st.prompts || Array.isArray( st.prompts ) ) {
+					st.prompts = {};
+				}
 				settingsDirty = false;
 				status.textContent = 'Saved ✓';
 				status.classList.remove( 'is-dirty' );

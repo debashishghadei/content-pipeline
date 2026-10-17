@@ -224,9 +224,11 @@ final class Article_Api {
 	 * @return array<string, mixed>
 	 */
 	private static function settings_payload( int $folder ): array {
+		$settings            = Sites::get( $folder );
+		$settings['prompts'] = (object) $settings['prompts']; // Always a JSON object, also when empty.
 		return array(
 			'folder'          => $folder,
-			'settings'        => Sites::get( $folder ),
+			'settings'        => $settings,
 			'default_prompts' => Prompts::defaults(),
 			'steps'           => Prompts::steps(),
 			'boxes'           => Prompts::boxes(),

@@ -1745,6 +1745,10 @@
 	}
 
 	function render() {
+		const shell = document.querySelector( '.cp-shell' );
+		if ( shell ) {
+			shell.classList.toggle( 'is-article-view', !! Views[ S.view.mode ] );
+		}
 		renderSide();
 		renderMain();
 	}

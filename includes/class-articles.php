@@ -418,7 +418,8 @@ final class Articles {
 	}
 
 	/**
-	 * Store step data, title, stage, and move the note's status forward.
+	 * Store step data, title, stage, and move the note's status forward when the article
+	 * reaches a new stage (a status you set back by hand on the note is respected).
 	 *
 	 * @param \WP_Post $post Article.
 	 * @param array    $data Step data.
@@ -432,8 +433,12 @@ final class Articles {
 				'post_content' => self::encode( $data ),
 			)
 		);
-		$stage = self::stage( $data );
+		$stage    = self::stage( $data );
+		$previous = (string) get_post_meta( $post->ID, 'cp_stage', true );
 		update_post_meta( $post->ID, 'cp_stage', $stage );
+		if ( $stage === $previous ) {
+			return; // The note's status only follows when the article reaches a new stage.
+		}
 
 		$note_id = (int) get_post_meta( $post->ID, 'cp_note_id', true );
 		$note    = $note_id ? Notes::get( $note_id ) : null;

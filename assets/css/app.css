@@ -1948,3 +1948,13 @@ textarea.cp-field {
 		grid-column: 2;
 	}
 }
+
+.cp-shell.is-article-view .cp-fab {
+	display: none;
+}
+
+@media (max-width: 860px) {
+	.cp-art__title {
+		font-size: 1.1rem;
+	}
+}
