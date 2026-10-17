@@ -2892,6 +2892,12 @@
 		api, isOffline, isLoginError, needOnline, reportError, toast, dialog, ask, confirmBox, openMenu, closeMenu, copyText,
 		go, render, renderLight, renderSide, folderPath, siteOf, ancestors, childrenOf, noteKey, articlesOf, summaryOf, updateNoteStatus,
 		changeArticle, flush, setSync, currentSync, persist,
+		openNote: ( id ) => {
+			const key = noteKey( id );
+			if ( S.notes.has( key ) ) {
+				Editor.open( key );
+			}
+		},
 	};
 
 	// Start once every script on the page has loaded (article.js registers its screens first).
