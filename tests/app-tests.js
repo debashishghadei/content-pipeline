@@ -251,9 +251,10 @@ async function dialogInput( page, value, button ) {
 	await page.fill( '.cp-search input', 'interview' );
 	await page.waitForSelector( '.cp-scope' );
 	await page.click( '.cp-scope .cp-chip:has-text("and its subfolders")' );
-	ok( await page.isVisible( '.cp-crumbs:has-text("0 results")' ), 'search can be limited to the current folder' );
+	ok( await page.waitForSelector( '.cp-crumbs:has-text("0 results")', { timeout: 5000 } ).then( () => true, () => false ), 'search can be limited to the current folder' );
 	await page.click( '.cp-scope .cp-chip:text-is("All folders")' );
-	ok( await page.isVisible( '.cp-crumbs:has-text("1 result")' ), 'search in all folders again' );
+	const again = await page.waitForSelector( '.cp-crumbs:has-text("1 result")', { timeout: 5000 } ).then( () => true, () => false );
+	ok( again, 'search in all folders again', again ? '' : await page.textContent( '.cp-crumbs' ) );
 	await page.click( '.cp-search__clear' );
 
 	console.log( '== Offline' );
