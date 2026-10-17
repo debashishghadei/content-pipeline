@@ -32,6 +32,10 @@ require_once CONTENT_PIPELINE_DIR . 'includes/class-notes.php';
 require_once CONTENT_PIPELINE_DIR . 'includes/class-files.php';
 require_once CONTENT_PIPELINE_DIR . 'includes/class-api.php';
 require_once CONTENT_PIPELINE_DIR . 'includes/class-ollama.php';
+require_once CONTENT_PIPELINE_DIR . 'includes/class-prompts.php';
+require_once CONTENT_PIPELINE_DIR . 'includes/class-sites.php';
+require_once CONTENT_PIPELINE_DIR . 'includes/class-articles.php';
+require_once CONTENT_PIPELINE_DIR . 'includes/class-article-api.php';
 
 register_activation_hook( __FILE__, array( Plugin::class, 'activate' ) );
 register_deactivation_hook( __FILE__, array( Plugin::class, 'deactivate' ) );
