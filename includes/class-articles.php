@@ -329,6 +329,7 @@ final class Articles {
 
 			case 'ready':
 			case 'published':
+			case 'use_draft':
 				return (bool) $value;
 		}
 
@@ -363,7 +364,10 @@ final class Articles {
 		if ( $current && $base_rev !== $cur_rev ) {
 			if ( $value !== $current['value'] && ! self::is_empty( $value ) ) {
 				self::push_version( $data['fields'][ $field ], $value, 'conflict' );
-				self::write( $post, $data );
+				$written = self::write( $post, $data );
+				if ( is_wp_error( $written ) ) {
+					return $written;
+				}
 			}
 			return array( 'conflict' => true );
 		}
@@ -384,7 +388,10 @@ final class Articles {
 			return array( 'conflict' => false );
 		}
 
-		self::write( $post, $data );
+		$written = self::write( $post, $data );
+		if ( is_wp_error( $written ) ) {
+			return $written;
+		}
 		return array( 'conflict' => false );
 	}
 
@@ -420,24 +427,30 @@ final class Articles {
 	/**
 	 * Store step data, title, stage, and move the note's status forward when the article
 	 * reaches a new stage (a status you set back by hand on the note is respected).
+	 * The stage and the note change only after WordPress stored the data.
 	 *
 	 * @param \WP_Post $post Article.
 	 * @param array    $data Step data.
+	 * @return true|\WP_Error
 	 */
-	private static function write( \WP_Post $post, array $data ): void {
-		$title = (string) ( self::value( $data, 'title' ) ?? '' );
-		Api::save_quietly(
+	private static function write( \WP_Post $post, array $data ) {
+		$title  = (string) ( self::value( $data, 'title' ) ?? '' );
+		$result = Api::save_quietly(
 			array(
 				'ID'           => $post->ID,
 				'post_title'   => $title,
 				'post_content' => self::encode( $data ),
 			)
 		);
+		if ( is_wp_error( $result ) || ! $result ) {
+			// Nothing was stored: report it, and leave the stage and the note alone (review of 0.4.0).
+			return self::write_error( $result );
+		}
 		$stage    = self::stage( $data );
 		$previous = (string) get_post_meta( $post->ID, 'cp_stage', true );
 		update_post_meta( $post->ID, 'cp_stage', $stage );
 		if ( $stage === $previous ) {
-			return; // The note's status only follows when the article reaches a new stage.
+			return true; // The note's status only follows when the article reaches a new stage.
 		}
 
 		$note_id = (int) get_post_meta( $post->ID, 'cp_note_id', true );
@@ -449,6 +462,22 @@ final class Articles {
 				update_post_meta( $note_id, 'cp_status', $stage );
 			}
 		}
+		return true;
+	}
+
+	/**
+	 * "Could not store" error (HTTP 500, so the app keeps the change and tries again).
+	 *
+	 * @param mixed $result What wp_update_post() returned.
+	 * @return \WP_Error
+	 */
+	private static function write_error( $result ): \WP_Error {
+		$detail = is_wp_error( $result ) ? $result->get_error_message() : '';
+		return new \WP_Error(
+			'cp_article_update',
+			trim( __( 'WordPress could not store this part of the article. Your text is kept here and saving is tried again.', 'content-pipeline' ) . ' ' . $detail ),
+			array( 'status' => 500 )
+		);
 	}
 
 	/**
@@ -456,10 +485,17 @@ final class Articles {
 	 *
 	 * @param int $id   Article id.
 	 * @param int $site Website folder id (0 = none).
+	 * @return true|\WP_Error
 	 */
-	public static function set_site( int $id, int $site ): void {
+	public static function set_site( int $id, int $site ) {
+		$before = get_post_meta( $id, 'cp_site', true );
 		update_post_meta( $id, 'cp_site', $site );
-		Api::save_quietly( array( 'ID' => $id ) );
+		$result = Api::save_quietly( array( 'ID' => $id ) );
+		if ( is_wp_error( $result ) || ! $result ) {
+			update_post_meta( $id, 'cp_site', $before );
+			return self::write_error( $result );
+		}
+		return true;
 	}
 
 	/**

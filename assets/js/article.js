@@ -94,8 +94,57 @@
 
 	/** The text that is checked and exported: polished text, or the draft as it is. */
 	function finalText( art ) {
-		const p = String( val( art, 'polish', '' ) ).trim();
-		return p || assembled( art );
+		return usesPolish( art ) ? String( val( art, 'polish', '' ) ).trim() : assembled( art );
+	}
+
+	function usesPolish( art ) {
+		return !! String( val( art, 'polish', '' ) ).trim() && ! val( art, 'use_draft', false );
+	}
+
+	function timeOf( art, name ) {
+		const t = Date.parse( fieldOf( art, name ).at || '' );
+		return isNaN( t ) ? 0 : t;
+	}
+
+	/** Headings of draft sections changed after the polished text was last saved. */
+	function changedAfterPolish( art ) {
+		if ( ! String( val( art, 'polish', '' ) ).trim() ) {
+			return [];
+		}
+		const polished = timeOf( art, 'polish' );
+		const out = draftSections( art ).filter( ( s ) => timeOf( art, 'section:' + s.id ) > polished ).map( ( s ) => s.heading || 'Untitled section' );
+		if ( timeOf( art, 'approved' ) > polished ) {
+			out.unshift( 'the outline (approved again)' );
+		}
+		return out;
+	}
+
+	/** Says which text is checked and exported, warns when the polished text is out of date. */
+	function sourceBar( art, where ) {
+		const hasPolish = !! String( val( art, 'polish', '' ) ).trim();
+		const changed = changedAfterPolish( art );
+		const pick = ( useDraft ) => h( 'button', { type: 'button', class: 'cp-btn', onClick: () => {
+			saveField( art, 'use_draft', useDraft, false );
+			renderStep();
+		} }, useDraft ? 'Use the draft instead' : 'Use the polished text' );
+		const verb = 'check' === where ? 'Checked' : 'Exported';
+		if ( ! hasPolish ) {
+			return 'check' === where || 'export' === where ? h( 'div', { class: 'cp-exported' }, h( 'p', null, verb + ' text: the draft (not polished).' ) ) : null;
+		}
+		const list = changed.length ? changed.join( ', ' ) : '';
+		if ( ! usesPolish( art ) ) {
+			return h( 'div', { class: 'cp-exported' },
+				h( 'p', null, verb + ' text: the draft, as you chose. The polished text is kept' + ( list ? ', but it is older than these changes in the draft: ' + list : '' ) + '.' ),
+				h( 'div', { class: 'cp-actions' }, pick( false ) ) );
+		}
+		if ( ! changed.length ) {
+			return h( 'div', { class: 'cp-exported' }, h( 'p', null, verb + ' text: the polished article.' ) );
+		}
+		return h( 'div', { class: 'cp-exported is-stale', role: 'status' },
+			h( 'p', null, h( 'strong', null, 'The draft changed after polishing: ' ), list + '. ' + ( 'polish' === where
+				? 'The polished text below does not have these changes. Polish again, or copy the draft into the box.'
+				: verb + ' is still the older polished text, without these changes.' ) ),
+			h( 'div', { class: 'cp-actions' }, pick( true ) ) );
 	}
 
 	function seoOf( art ) {
@@ -634,6 +683,7 @@
 			const draft = assembled( art );
 			append( el, [
 				h( 'p', { class: 'cp-scope' }, 'The draft has ' + B.words( draft ) + ' words in ' + draftSections( art ).length + ' sections. Polishing is optional: if this box stays empty, the draft is used as it is.' ),
+				sourceBar( art, 'polish' ),
 				stepActions( art, 'polish', 'polish', { promptTitle: 'Prompt: polish', before: () => {
 					if ( ! draft ) {
 						toast( 'Write the draft first.' );
@@ -660,7 +710,8 @@
 			const warns = rows.filter( ( r ) => 'warn' === r.state ).length;
 			const icons = { ok: [ 'check', 'Passed' ], warn: [ 'bolt', 'Check this' ], fail: [ 'close', 'Must fix' ] };
 			append( el, [
-				h( 'p', { class: 'cp-scope' }, 'Checking the ' + ( String( val( art, 'polish', '' ) ).trim() ? 'polished article' : 'draft (not polished)' ) + '. ' + ( fails ? fails + ' must be fixed, ' : '' ) + ( warns ? warns + ' to look at.' : fails ? '' : 'Everything looks good.' ) ),
+				sourceBar( art, 'check' ),
+				h( 'p', { class: 'cp-scope' }, ( fails ? fails + ' must be fixed, ' : '' ) + ( warns ? warns + ' to look at.' : fails ? '' : 'Everything looks good.' ) ),
 				h( 'ul', { class: 'cp-checks' }, rows.map( ( r ) => h( 'li', { class: 'cp-check cp-check--' + r.state },
 					h( 'span', { class: 'cp-check__icon', title: icons[ r.state ][ 1 ] }, icon( icons[ r.state ][ 0 ] ) ),
 					h( 'span', { class: 'cp-check__label' }, r.label ),
@@ -802,6 +853,7 @@
 			const published = !! val( art, 'published', false );
 			append( el, [
 				text ? null : h( 'p', { class: 'cp-warn' }, 'There is no article text yet.' ),
+				text ? sourceBar( art, 'export' ) : null,
 				h( 'div', { class: 'cp-actions' },
 					h( 'button', { type: 'button', class: 'cp-btn cp-btn--primary cp-copy-blocks', disabled: ! text, onClick: () => copyText( blocks, 'Copied as WordPress blocks. Paste into a new post.' ) }, icon( 'copy' ), 'Copy for WordPress' ),
 					h( 'button', { type: 'button', class: 'cp-btn', disabled: ! text, onClick: () => copyText( text, 'Copied as Markdown.' ) }, icon( 'copy' ), 'Copy as Markdown' ),
@@ -1057,7 +1109,11 @@
 		Object.assign( art, { stage: server.stage, site: server.site, title: server.title, modified: server.modified } );
 		if ( WS && WS.id === server.id ) {
 			for ( const r of WS.refs ) {
-				if ( r.field === field && conflict && document.activeElement !== r.el ) {
+				// After a conflict, show the current text once nothing typed here is still
+				// waiting (all of it is then stored, at least as an earlier version), also
+				// when the box has the focus: typing on top of the old text would replace
+				// the other device's text unnoticed.
+				if ( r.field === field && conflict && ! waiting.has( field ) ) {
 					r.set( val( art, field, '' ) );
 				}
 			}

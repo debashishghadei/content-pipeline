@@ -2,6 +2,15 @@
 
 All notable changes to Content Pipeline Hub. Versions follow semantic versioning (0.x while Phase 1 is built).
 
+## 0.4.1 — 2026-10-17
+
+From ChatGPT's review of 0.4.0 (each point reproduced with a test before fixing).
+
+- **Fixed: a failed article write was answered as saved.** Reproduced: with WordPress refusing the update, the API answered 200; a failed "ready" save still moved the stage to Ready and the note's status with it; a conflict copy that could not be stored was reported as kept. Also found the same for changing an article's website. Now every article write checks WordPress's answer: on failure the API answers 500 (`cp_article_update`), the stage, the note's status and the website stay as they were, and the app keeps the change waiting and tries again ("Saved" is not shown).
+- **Fixed: a conflict answer threw away typing made while the save was on its way.** Reproduced: the app deleted the whole waiting change and showed "saved", keeping only the text that had been sent. Now only the text actually sent is cleared; later typing stays waiting and is also kept as an earlier version. Also fixed (found while testing this): when the box had the focus during a conflict, it kept showing the old text, and further typing then replaced the other device's text. Now the box shows the current text as soon as everything typed here is stored.
+- **New (workflow suggestion): warning when the draft changed after polishing.** Polish, Check and Copy to WordPress say which text is used (polished article or draft) and name the sections changed after the polished text was saved. **Use the draft instead** / **Use the polished text** chooses the exported text; the choice is saved with the article (field `use_draft`). Both texts are kept.
+- Tests: tests/review-040-tests.sh (13, server: 8 fail on 0.4.0), tests/review-040-app.js (24, browser: 9 fail on 0.4.0, the rest could not run).
+
 ## 0.4.0 — 2026-10-17
 
 Phase 2: the article workspace. No AI connection needed: every step builds a prompt you paste into ChatGPT or Claude, and you paste the answer back.

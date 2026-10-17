@@ -11,6 +11,7 @@ set -u
 [ "${CP_TEST_DISPOSABLE:-}" = "1" ] || { echo "Refusing to run: set CP_TEST_DISPOSABLE=1 (disposable test site only)."; exit 2; }
 DIR=$(cd "$(dirname "$0")" && pwd)
 export BASE="${BASE:-http://localhost:8080}"
+export WP_DIR="${WP_DIR:-/home/claude/rig/wp}"
 export OLLAMA_PORT="${OLLAMA_PORT:-11435}"
 export OLLAMA_BLOCKED_PORT="${OLLAMA_BLOCKED_PORT:-11436}"
 
@@ -48,4 +49,7 @@ node "$DIR/article-app.js"; R5=$?
 echo
 echo "== Converter and block validity (0.4)"
 node "$DIR/blocks-tests.js"; R6=$?
-[ "$R1" -eq 0 ] && [ "$R2" -eq 0 ] && [ "$R3" -eq 0 ] && [ "$R4" -eq 0 ] && [ "$R5" -eq 0 ] && [ "$R6" -eq 0 ]
+echo
+echo "== Article saving and stale polish (ChatGPT review of 0.4.0)"
+node "$DIR/review-040-app.js"; R7=$?
+[ "$R1" -eq 0 ] && [ "$R2" -eq 0 ] && [ "$R3" -eq 0 ] && [ "$R4" -eq 0 ] && [ "$R5" -eq 0 ] && [ "$R6" -eq 0 ] && [ "$R7" -eq 0 ]

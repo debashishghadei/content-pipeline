@@ -943,6 +943,7 @@
 		const key = 'a' + art.id + '|' + field;
 		const f = art.fields[ field ] || ( art.fields[ field ] = { value: null, rev: 0, versions: [] } );
 		f.value = clone( value );
+		f.at = nowIso(); // Local time of the change (used to see a draft changed after polishing).
 		let entry = S.pending.get( key );
 		if ( ! entry ) {
 			entry = { key, kind: 'article', id: art.id, field, fields: {}, base: f.rev || 0, rev: 0, snapshot: false, created: nowIso() };
@@ -974,12 +975,15 @@
 		const art = data.article;
 		const serverField = art.fields[ entry.field ] || { rev: 0 };
 		const current = S.pending.get( key );
-		if ( data.conflict || ( current && current.rev === sentRev ) ) {
-			S.pending.delete( key );
-		} else if ( current ) {
+		if ( current && current.rev === sentRev ) {
+			S.pending.delete( key ); // Exactly what was sent is stored (or kept as an earlier version).
+		} else if ( current && ! data.conflict ) {
 			current.base = serverField.rev;
 			current.snapshot = false;
 		}
+		// Conflict with more typing since the request: keep that typing waiting on the old
+		// revision, so it is also stored as an earlier version instead of being dropped
+		// (ChatGPT review of 0.4.0).
 		S.articles.set( art.id, Object.assign( S.articles.get( art.id ) || {}, summaryOf( art ) ) );
 		updateNoteStatus( art );
 		persist();

@@ -100,7 +100,10 @@ final class Article_Api {
 			$params = is_array( $params ) ? $params : $request->get_body_params();
 
 			if ( array_key_exists( 'site', $params ) ) {
-				Articles::set_site( $id, self::site_or_zero( (int) $params['site'] ) );
+				$moved = Articles::set_site( $id, self::site_or_zero( (int) $params['site'] ) );
+				if ( is_wp_error( $moved ) ) {
+					return $moved;
+				}
 				return Api::no_cache(
 					array(
 						'article'  => Articles::full( Articles::fresh( $id ) ),

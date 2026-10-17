@@ -1567,9 +1567,33 @@ textarea.cp-field {
 	stroke-width: 2.5;
 }
 
+/* Which text is checked and exported (polished or draft). */
+.cp-exported {
+	margin: 0 0 12px;
+	padding: 8px 12px;
+	border: 1px solid var(--cp-line);
+	border-radius: 10px;
+	background: var(--cp-surface-2);
+}
+
+.cp-exported p {
+	margin: 0;
+}
+
+.cp-exported .cp-actions {
+	margin: 8px 0 0;
+}
+
+.cp-exported.is-stale {
+	border-color: #e0b44a;
+	background: #fff4d6;
+	color: #6b4700;
+}
+
 @media (prefers-color-scheme: dark) {
 	.cp-ok { background: #13311c; color: #8fe0a6; }
-	.cp-warn { background: #3a2d0c; color: #f0c25a; }
+	.cp-warn,
+	.cp-exported.is-stale { background: #3a2d0c; color: #f0c25a; }
 }
 
 .cp-approve {
