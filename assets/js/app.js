@@ -46,6 +46,14 @@
 		globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
 		refresh: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
 		shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+		article: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+		settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+		copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+		paste: '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/>',
+		up: '<path d="m18 15-6-6-6 6"/>',
+		down: '<path d="m6 9 6 6 6-6"/>',
+		check: '<path d="M20 6 9 17l-5-5"/>',
+		external: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>',
 	};
 
 	function icon( name ) {
@@ -163,6 +171,8 @@
 		sync: { state: 'saved', flushing: false, nonce: C.nonce, lastRefresh: Date.now(), storageError: false },
 		editorKey: null,
 		trash: null,
+		articles: new Map(), // id → summary {id, note, site, title, stage, …}
+		art: new Map(), // id → full article (loaded when opened)
 	};
 
 	function noteKey( id ) {
@@ -170,6 +180,9 @@
 	}
 
 	function loadServerState( state ) {
+		if ( state.articles ) {
+			S.articles = new Map( state.articles.map( ( a ) => [ a.id, a ] ) );
+		}
 		S.inbox = state.inbox;
 		S.statuses = state.statuses || S.statuses;
 		setFolders( state.folders );
@@ -300,6 +313,9 @@
 	 * @param {Map}    notes Note list to update.
 	 */
 	function placeEntry( entry, notes ) {
+		if ( 'article' === entry.kind ) {
+			return; // Article fields are applied when the article is opened (see Article view).
+		}
 		if ( entry.create ) {
 			notes.set( entry.key, S.notes.get( entry.key ) || noteFromEntry( entry ) );
 		} else if ( notes.has( entry.key ) ) {
@@ -444,6 +460,14 @@
 				continue;
 			}
 			delete entry.error; // Taking over = trying again.
+			if ( 'article' === entry.kind ) {
+				if ( S.pending.has( entry.key ) ) {
+					// Both copies are saved; the server keeps the second as an earlier version.
+					entry.key = entry.key + '#' + uid();
+				}
+				S.pending.set( entry.key, entry );
+				continue;
+			}
 			if ( ! S.pending.has( entry.key ) ) {
 				S.pending.set( entry.key, entry );
 			} else {
@@ -660,6 +684,9 @@
 		if ( ! entry || entry.error ) {
 			return; // Rejected changes wait for "Try again" (or the next page load).
 		}
+		if ( 'article' === entry.kind ) {
+			return flushArticle( key, entry );
+		}
 		const sentRev = entry.rev;
 		const fields = clone( entry.fields );
 
@@ -852,7 +879,7 @@
 
 	function saveFailedAsNew() {
 		for ( const [ key, e ] of Array.from( S.pending ) ) {
-			if ( e.error ) {
+			if ( e.error && 'article' !== e.kind ) {
 				saveAsNewNote( key, 'Your unsaved text was kept as a new note.' );
 			}
 		}
@@ -866,17 +893,141 @@
 		}
 		if ( failed.length ) {
 			const first = failed[ 0 ];
-			const n = S.notes.get( first.key ) || noteFromEntry( first );
+			const isArticle = 'article' === first.kind;
+			const name = isArticle ? ( first.title || 'Untitled article' ) + ' – ' + fieldLabel( first.field ) : ( S.notes.get( first.key ) || noteFromEntry( first ) ).title || 'Untitled note';
 			append( el, [
 				h( 'span', { style: 'flex:1' },
-					( 1 === failed.length ? 'A change to “' + ( n.title || 'Untitled note' ) + '” was not saved' : failed.length + ' changes were not saved' ) +
+					( 1 === failed.length ? 'A change to “' + name + '” was not saved' : failed.length + ' changes were not saved' ) +
 					': the server refused it (' + first.error.message + '). Your text is kept on this device.'
 				),
 				h( 'button', { type: 'button', class: 'cp-btn cp-btn--primary', onClick: retryFailed }, 'Try again' ),
-				first.create ? null : h( 'button', { type: 'button', class: 'cp-btn', onClick: saveFailedAsNew }, 'Save as new note' ),
+				! isArticle && ! first.create ? h( 'button', { type: 'button', class: 'cp-btn', onClick: saveFailedAsNew }, 'Save as new note' ) : null,
+				isArticle ? h( 'button', { type: 'button', class: 'cp-btn', onClick: () => copyText( 'string' === typeof first.value ? first.value : JSON.stringify( first.value, null, 2 ), 'Text copied. You can paste it anywhere.' ) }, 'Copy text' ) : null,
+				isArticle ? h( 'button', { type: 'button', class: 'cp-btn cp-btn--danger', onClick: async () => {
+					if ( await confirmBox( 'Discard this change', 'Throw away the unsaved change to “' + name + '”? Copy the text first if you still need it.', 'Discard', true ) ) {
+						S.pending.delete( first.key );
+						persist();
+						setSync( currentSync() );
+						renderLight();
+					}
+				} }, 'Discard' ) : null,
 			] );
 		}
 		return el;
+	}
+
+	/* ---------------- Article fields in the queue ---------------- */
+
+	const FIELD_LABELS = { title: 'title', cleanup: 'cleanup', outline_text: 'outline text', outline: 'outline', approved: 'outline approval', polish: 'polish', seo: 'SEO fields', ready: 'ready', published: 'published' };
+
+	function fieldLabel( field ) {
+		if ( /^section:/.test( field || '' ) ) {
+			return 'a draft section';
+		}
+		return FIELD_LABELS[ field ] || field;
+	}
+
+	// Set by the Article view (assets/js/article.js).
+	const ArticleHooks = { saved: null };
+
+	/**
+	 * Queue a change to one article field. Kept on this device until the server confirms it,
+	 * like note changes (D26, D27, D29, D31).
+	 *
+	 * @param {Object}  art      Full article (from S.art).
+	 * @param {string}  field    Field name.
+	 * @param {*}       value    New value.
+	 * @param {boolean} snapshot Keep the previous value as an earlier version (paste, restore).
+	 */
+	function changeArticle( art, field, value, snapshot ) {
+		const key = 'a' + art.id + '|' + field;
+		const f = art.fields[ field ] || ( art.fields[ field ] = { value: null, rev: 0, versions: [] } );
+		f.value = clone( value );
+		let entry = S.pending.get( key );
+		if ( ! entry ) {
+			entry = { key, kind: 'article', id: art.id, field, fields: {}, base: f.rev || 0, rev: 0, snapshot: false, created: nowIso() };
+			S.pending.set( key, entry );
+		}
+		entry.value = clone( value );
+		entry.title = art.title || ( art.fields.title && art.fields.title.value ) || '';
+		entry.snapshot = entry.snapshot || !! snapshot;
+		entry.rev++;
+		entry.modified = nowIso();
+		persist();
+		scheduleFlush();
+	}
+
+	async function flushArticle( key, entry ) {
+		const sentRev = entry.rev;
+		let data;
+		try {
+			data = await api( 'POST', 'articles/' + entry.id, { field: entry.field, value: entry.value, base_rev: entry.base, snapshot: entry.snapshot } );
+		} catch ( err ) {
+			if ( isLoginError( err ) || isOffline( err ) || err.status >= 500 ) {
+				throw err;
+			}
+			entry.error = { status: err.status, code: err.code, message: err.message, at: nowIso() };
+			persist();
+			renderLight();
+			return;
+		}
+		const art = data.article;
+		const serverField = art.fields[ entry.field ] || { rev: 0 };
+		const current = S.pending.get( key );
+		if ( data.conflict || ( current && current.rev === sentRev ) ) {
+			S.pending.delete( key );
+		} else if ( current ) {
+			current.base = serverField.rev;
+			current.snapshot = false;
+		}
+		S.articles.set( art.id, Object.assign( S.articles.get( art.id ) || {}, summaryOf( art ) ) );
+		updateNoteStatus( art );
+		persist();
+		if ( ArticleHooks.saved ) {
+			ArticleHooks.saved( art, entry.field, !! data.conflict );
+		}
+		if ( data.conflict ) {
+			toast( 'This part of the article was changed on another device. Nothing was overwritten: your version is kept under “Earlier versions”.', null, 9000 );
+		}
+		renderLight();
+	}
+
+	function summaryOf( art ) {
+		return { id: art.id, note: art.note, site: art.site, title: art.title, stage: art.stage, created: art.created, modified: art.modified, trashed: art.trashed };
+	}
+
+	// The server moves the note's status forward with its article; mirror that here.
+	function updateNoteStatus( art ) {
+		const n = S.notes.get( noteKey( art.note ) );
+		const order = [ 'idea', 'outline_ready', 'draft_ready', 'ready', 'published' ];
+		if ( n && order.indexOf( art.stage ) > order.indexOf( n.status ) ) {
+			n.status = art.stage;
+		}
+	}
+
+	function copyText( text, message ) {
+		const done = () => toast( message || 'Copied.' );
+		const fallback = () => {
+			const ta = h( 'textarea', { style: 'position:fixed;top:0;left:0;opacity:0', readonly: true } );
+			ta.value = text;
+			( document.querySelector( 'dialog[open]' ) || document.body ).appendChild( ta );
+			ta.select();
+			let ok = false;
+			try {
+				ok = document.execCommand( 'copy' );
+			} catch ( e ) {}
+			ta.remove();
+			if ( ok ) {
+				done();
+			} else {
+				toast( 'Could not copy automatically. Select the text and copy it by hand.' );
+			}
+		};
+		if ( navigator.clipboard && window.isSecureContext ) {
+			navigator.clipboard.writeText( text ).then( done, fallback );
+		} else {
+			fallback();
+		}
 	}
 
 	async function refreshFromServer() {
@@ -1387,6 +1538,7 @@
 		const f = S.folders.get( id );
 		const isInbox = id === S.inbox;
 		openMenu( anchor, [
+			f.is_site ? { label: 'Website writing settings', icon: 'settings', run: () => go( 'site', id ) } : null,
 			{ label: 'New folder inside', icon: 'folderPlus', run: () => newFolderIn( id ) },
 			{ label: 'New note here', icon: 'plus', run: () => newNote( id ) },
 			{ label: 'Rename', icon: 'edit', run: () => renameFolder( id ) },
@@ -1401,8 +1553,34 @@
 	 * Navigation
 	 * ======================================================= */
 
-	function go( mode, folder ) {
+	const Views = {}; // Extra screens, registered by assets/js/article.js.
+
+	/**
+	 * Open a screen. Article screens get their own address (#article=12, #articles,
+	 * #site=5), so reloading and the phone's Back button work.
+	 *
+	 * @param {string} mode   all | folder | trash | articles | article | site
+	 * @param {number} folder Folder id (folder), article id (article), folder id (site).
+	 * @param {boolean} fromHistory Called from the Back button: do not add a history entry.
+	 */
+	function go( mode, folder, fromHistory ) {
+		const hashFor = { articles: '#articles', article: '#article=' + folder, site: '#site=' + folder };
+		if ( ! fromHistory ) {
+			const hash = hashFor[ mode ] || '';
+			if ( hash !== window.location.hash ) {
+				try {
+					window.history.pushState( { cpView: 1 }, '', hash || window.location.pathname + window.location.search );
+				} catch ( e ) {}
+			}
+		}
 		S.view.mode = mode;
+		if ( 'article' === mode || 'site' === mode ) {
+			S.view.id = folder;
+			S.view.q = '';
+			if ( searchInput ) {
+				searchInput.value = '';
+			}
+		}
 		if ( 'folder' === mode ) {
 			S.view.folder = folder;
 			for ( const a of ancestors( folder ) ) {
@@ -1418,8 +1596,16 @@
 		render();
 		window.scrollTo( 0, 0 );
 		try {
-			window.localStorage.setItem( 'cp-view', JSON.stringify( { mode, folder: S.view.folder } ) );
+			if ( ! hashFor[ mode ] ) {
+				window.localStorage.setItem( 'cp-view', JSON.stringify( { mode, folder: S.view.folder } ) );
+			}
 		} catch ( e ) {}
+	}
+
+	/** Screen named by the address (#article=12 …), or null. */
+	function viewFromHash() {
+		const m = window.location.hash.match( /^#(articles|article|site)(?:=(\d+))?$/ );
+		return m ? { mode: m[ 1 ], id: m[ 2 ] ? parseInt( m[ 2 ], 10 ) : 0 } : null;
 	}
 
 	function saveExpanded() {
@@ -1581,6 +1767,13 @@
 		);
 		makeDropTargetTop( allNode );
 
+		const liveArticles = Array.from( S.articles.values() ).filter( ( a ) => ! a.trashed ).length;
+		const articlesNode = h( 'div', { class: 'cp-node' + ( ( 'articles' === S.view.mode || 'article' === S.view.mode ) && ! S.view.q ? ' is-current' : '' ) },
+			h( 'span', { class: 'cp-node__toggle cp-node__toggle--empty' } ),
+			h( 'button', { type: 'button', class: 'cp-node__open', onClick: () => go( 'articles' ) }, icon( 'article' ), h( 'span', { class: 'cp-node__name' }, 'Articles' ), h( 'span', { class: 'cp-node__count' }, String( liveArticles ) ) ),
+			h( 'span', { class: 'cp-node__spacer' } )
+		);
+
 		const tree = h( 'ul', { class: 'cp-tree' } );
 		buildTree( tree, 0 );
 
@@ -1592,6 +1785,7 @@
 
 		append( sideEl, [
 			allNode,
+			articlesNode,
 			h( 'div', { class: 'cp-side__label' }, 'Folders' ),
 			tree,
 			h( 'button', { type: 'button', class: 'cp-btn cp-side__new', onClick: () => newFolderIn( 0 ) }, icon( 'folderPlus' ), 'New folder' ),
@@ -1665,7 +1859,15 @@
 	 * ======================================================= */
 
 	function renderMain() {
+		const view = Views[ S.view.mode ];
+		const mountKey = view ? S.view.mode + ':' + ( S.view.id || 0 ) : '';
+		// A mounted article screen is only updated, never rebuilt while you type in it.
+		if ( view && view.update && mainEl.dataset.mounted === mountKey && ! S.view.q.trim() ) {
+			view.update();
+			return;
+		}
 		mainEl.textContent = '';
+		mainEl.dataset.mounted = '';
 		const inner = h( 'div', { class: 'cp-main__inner' } );
 		mainEl.appendChild( inner );
 
@@ -1677,6 +1879,9 @@
 
 		if ( S.view.q.trim() && 'trash' !== S.view.mode ) {
 			renderSearch( inner );
+		} else if ( view ) {
+			view.render( inner, S.view.id || 0 );
+			mainEl.dataset.mounted = mountKey;
 		} else if ( 'trash' === S.view.mode ) {
 			renderTrash( inner );
 		} else if ( 'all' === S.view.mode ) {
@@ -1751,6 +1956,49 @@
 			add( value, label );
 		}
 		return wrap;
+	}
+
+	function articlesOf( n ) {
+		if ( ! n || ! n.id ) {
+			return [];
+		}
+		return Array.from( S.articles.values() ).filter( ( a ) => a.note === n.id && ! a.trashed );
+	}
+
+	/**
+	 * Start an article from a note (the note must be saved first) and open it.
+	 *
+	 * @param {string} key Note key.
+	 */
+	async function writeArticle( key ) {
+		if ( ! needOnline() ) {
+			return;
+		}
+		let n = S.notes.get( key );
+		if ( ! n ) {
+			return;
+		}
+		try {
+			if ( n.local || S.pending.has( key ) ) {
+				if ( n.local && ! S.pending.has( key ) ) {
+					change( key, { title: n.title } );
+				}
+				await flushOne( key );
+				n = S.notes.get( noteKey( ( S.notes.get( key ) || {} ).id ) ) || Array.from( S.notes.values() ).find( ( x ) => x.client_id === n.client_id && x.id ) || S.notes.get( key );
+			}
+			if ( ! n || ! n.id ) {
+				toast( 'The note could not be saved first. Try again in a moment.' );
+				return;
+			}
+			const site = siteOf( n.folder );
+			const data = await api( 'POST', 'articles', { client_id: uid(), note: n.id, site: site ? site.id : 0 } );
+			S.articles.set( data.article.id, summaryOf( data.article ) );
+			S.art.set( data.article.id, data.article );
+			Editor.close( true );
+			go( 'article', data.article.id );
+		} catch ( err ) {
+			reportError( err );
+		}
 	}
 
 	function sortNotes( list ) {
@@ -1837,6 +2085,10 @@
 		}
 		if ( showPath ) {
 			meta.appendChild( h( 'span', { class: 'cp-path' }, folderPath( n.folder ) ) );
+		}
+		const arts = articlesOf( n );
+		if ( arts.length ) {
+			meta.appendChild( h( 'span', { class: 'cp-badge cp-badge--article', title: 'This note has ' + arts.length + ' article' + ( 1 === arts.length ? '' : 's' ) }, '✎ ' + ( 1 === arts.length ? 'Article' : arts.length + ' articles' ) ) );
 		}
 		if ( S.pending.has( n.key ) ) {
 			meta.appendChild( h( 'span', { class: 'cp-pending', title: 'Not saved to the server yet' }, '● not saved yet' ) );
@@ -1933,10 +2185,25 @@
 			} }, 'Try again' ) ) );
 			return;
 		}
-		inner.appendChild( h( 'p', { class: 'cp-scope' }, 'Notes in the trash are deleted for good after ' + S.trash.days + ' days.' ) );
-		if ( ! S.trash.notes.length ) {
+		inner.appendChild( h( 'p', { class: 'cp-scope' }, 'Notes and articles in the trash are deleted for good after ' + S.trash.days + ' days.' ) );
+		const trashedArticles = S.trash.articles || [];
+		if ( ! S.trash.notes.length && ! trashedArticles.length ) {
 			inner.appendChild( h( 'div', { class: 'cp-empty' }, icon( 'trash' ), h( 'p', null, 'The trash is empty.' ) ) );
 			return;
+		}
+		if ( trashedArticles.length ) {
+			inner.appendChild( h( 'div', { class: 'cp-section-label' }, 'Articles' ) );
+			inner.appendChild( h( 'ul', { class: 'cp-rows' }, trashedArticles.map( ( a ) => h( 'li', { class: 'cp-row' },
+				h( 'div', { class: 'cp-row__text' },
+					h( 'div', { class: 'cp-row__title' }, a.title || 'Untitled article' ),
+					h( 'div', { class: 'cp-row__sub' }, 'Article · deleted ' + fmtDate( a.trashed_at ) )
+				),
+				h( 'button', { type: 'button', class: 'cp-btn', onClick: () => restoreArticle( a.id ) }, icon( 'restore' ), 'Restore' ),
+				h( 'button', { type: 'button', class: 'cp-btn cp-btn--danger', onClick: () => deleteArticleForever( a ) }, 'Delete forever' )
+			) ) ) );
+			if ( S.trash.notes.length ) {
+				inner.appendChild( h( 'div', { class: 'cp-section-label' }, 'Notes' ) );
+			}
 		}
 		const ul = h( 'ul', { class: 'cp-rows' } );
 		for ( const n of S.trash.notes ) {
@@ -1952,6 +2219,36 @@
 			) );
 		}
 		inner.appendChild( ul );
+	}
+
+	async function restoreArticle( id ) {
+		if ( ! needOnline() ) {
+			return;
+		}
+		try {
+			const data = await api( 'POST', 'articles/' + id + '/restore' );
+			S.articles.set( id, data.article );
+			S.trash = null;
+			render();
+			toast( 'Article restored.', { label: 'Open', run: () => go( 'article', id ) } );
+		} catch ( err ) {
+			reportError( err );
+		}
+	}
+
+	async function deleteArticleForever( a ) {
+		if ( ! ( await confirmBox( 'Delete forever', 'Delete the article “' + ( a.title || 'Untitled article' ) + '” for good? This cannot be undone.', 'Delete forever', true ) ) || ! needOnline() ) {
+			return;
+		}
+		try {
+			await api( 'DELETE', 'articles/' + a.id, null, { force: 1 } );
+			S.articles.delete( a.id );
+			S.trash = null;
+			renderMain();
+			toast( 'Article deleted for good.' );
+		} catch ( err ) {
+			reportError( err );
+		}
 	}
 
 	async function deleteForever( n ) {
@@ -2044,6 +2341,7 @@
 				files.forEach( uploadImage );
 			} } );
 			els.where = h( 'button', { type: 'button', class: 'cp-btn', onClick: () => askMoveNote( S.editorKey ) }, icon( 'folder' ), h( 'span', { class: 'cp-path' } ) );
+			els.articles = h( 'span', { class: 'cp-editor__articles' } );
 			els.info = h( 'span' );
 			els.sync = h( 'span' );
 
@@ -2069,7 +2367,7 @@
 				] ) )
 			);
 			const body = h( 'div', { class: 'cp-dialog__body' }, els.title, els.body, els.list, els.images, els.file );
-			const foot = h( 'div', { class: 'cp-editor__foot' }, els.where, h( 'span', { class: 'cp-editor__info' }, els.info, els.sync ) );
+			const foot = h( 'div', { class: 'cp-editor__foot' }, els.where, els.articles, h( 'span', { class: 'cp-editor__info' }, els.info, els.sync ) );
 			append( dlg, [ head, body, foot ] );
 			fill();
 		}
@@ -2107,6 +2405,15 @@
 				return;
 			}
 			els.where.querySelector( '.cp-path' ).textContent = folderPath( n.folder );
+			// Linked articles, and the button that starts a new one.
+			els.articles.textContent = '';
+			for ( const a of articlesOf( n ) ) {
+				els.articles.appendChild( h( 'button', { type: 'button', class: 'cp-btn', title: 'Open the article', onClick: () => {
+					close( true );
+					go( 'article', a.id );
+				} }, icon( 'article' ), ( a.title || 'Article' ).slice( 0, 30 ) + ' · ' + ( S.statuses[ a.stage ] || a.stage ) ) );
+			}
+			els.articles.appendChild( h( 'button', { type: 'button', class: 'cp-btn cp-btn--primary cp-write-article', onClick: () => writeArticle( S.editorKey ) }, icon( 'article' ), articlesOf( n ).length ? 'New article' : 'Write article' ) );
 			const site = siteOf( n.folder );
 			// The folder button already shows the folder; name the website only when it is a parent folder.
 			els.info.textContent = ( site && site.id !== n.folder ? site.name + ' · ' : '' ) + 'Edited ' + fmtDate( n.modified );
@@ -2496,10 +2803,28 @@
 				S.view.folder = saved.folder;
 			}
 		} catch ( e ) {}
+		const fromHash = viewFromHash();
+		if ( fromHash && Views[ fromHash.mode ] ) {
+			S.view.mode = fromHash.mode;
+			S.view.id = fromHash.id;
+		}
 
 		renderShell();
 		render();
 		setSync( S.pending.size ? 'saving' : 'saved' );
+
+		// Back / forward between screens (#article=12, #articles, #site=5, plain notes).
+		window.addEventListener( 'popstate', () => {
+			if ( Editor.isOpen() ) {
+				return; // The note editor handles its own Back.
+			}
+			const v = viewFromHash();
+			if ( v && Views[ v.mode ] ) {
+				go( v.mode, v.id, true );
+			} else if ( Views[ S.view.mode ] ) {
+				go( 'folder', S.view.folder || S.inbox, true ); // Back from an article screen to the notes.
+			}
+		} );
 		if ( S.pending.size ) {
 			scheduleFlush( 0 );
 			toast( 'Saving changes made earlier on this device…' );
@@ -2560,5 +2885,19 @@
 		window.cpHub = { state: S, flush, refresh: refreshFromServer, adopt: adoptOrphans };
 	}
 
-	start();
+	// Building blocks for the article screens (assets/js/article.js), which load after this file.
+	window.CPApp = {
+		C, S, Views, ArticleHooks,
+		h, append, icon, iconBtn, uid, clone, nowIso, fmtDate, fmtFull, debounce,
+		api, isOffline, isLoginError, needOnline, reportError, toast, dialog, ask, confirmBox, openMenu, closeMenu, copyText,
+		go, render, renderLight, renderSide, folderPath, siteOf, ancestors, childrenOf, noteKey, articlesOf, summaryOf, updateNoteStatus,
+		changeArticle, flush, setSync, currentSync, persist,
+	};
+
+	// Start once every script on the page has loaded (article.js registers its screens first).
+	if ( 'loading' === document.readyState ) {
+		document.addEventListener( 'DOMContentLoaded', start );
+	} else {
+		start();
+	}
 }() );
