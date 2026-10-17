@@ -38,6 +38,7 @@ final class Plugin {
 
 		Lockdown::init();
 		Notes::init();
+		Articles::init();
 		Api::init();
 		Files::init();
 		App::init();
@@ -104,6 +105,7 @@ final class Plugin {
 	 */
 	public static function activate(): void {
 		Notes::register();
+		Articles::register();
 		Notes::maybe_seed();
 		App::add_rewrite_rules();
 		flush_rewrite_rules( false );

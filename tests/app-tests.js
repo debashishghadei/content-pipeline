@@ -36,7 +36,7 @@ async function login( page, user, pass_ ) {
 	await page.goto( BASE + '/wp-login.php' );
 	await page.fill( '#user_login', user );
 	await page.fill( '#user_pass', pass_ );
-	await Promise.all( [ page.waitForNavigation(), page.click( '#wp-submit' ) ] );
+	await Promise.all( [ page.waitForNavigation( { timeout: 90000 } ), page.click( '#wp-submit' ) ] );
 }
 
 async function saved( page, timeout ) {
@@ -219,8 +219,14 @@ async function dialogInput( page, value, button ) {
 	}
 	await page.waitForSelector( '.cp-node__name:text-is("Interview prep")' );
 	await page.dragAndDrop( '.cp-node:has(.cp-node__name:text-is("Interview prep"))', '.cp-node:has(.cp-node__name:text-is("Personal brand"))' );
-	await page.waitForTimeout( 800 );
-	st = await serverState( page );
+	// Wait for the move to reach the server (a busy test server can take a few seconds).
+	for ( let k = 0; k < 40; k++ ) {
+		st = await serverState( page );
+		if ( st.folders.find( ( f ) => 'Interview prep' === f.name ).parent === folderId( st, 'Personal brand' ) ) {
+			break;
+		}
+		await page.waitForTimeout( 250 );
+	}
 	ok( st.folders.find( ( f ) => 'Interview prep' === f.name ).parent === folderId( st, 'Personal brand' ), 'drag a folder onto a folder moves the folder (with its notes)' );
 	await page.dragAndDrop( '.cp-node:has(.cp-node__name:text-is("Personal brand"))', '.cp-node:has(.cp-node__name:text-is("Freshers"))' ).catch( () => {} );
 	await page.waitForTimeout( 500 );

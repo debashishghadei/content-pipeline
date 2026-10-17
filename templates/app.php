@@ -32,7 +32,7 @@ wp_print_inline_script_tag(
 	'window.CP_APP = ' . wp_json_encode( $data['config'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP ) . ';',
 	array( 'id' => 'cp-app-config' )
 );
-wp_print_scripts( array( 'content-pipeline-app' ) );
+wp_print_scripts( array( 'content-pipeline-article' ) );
 ?>
 </body>
 </html>

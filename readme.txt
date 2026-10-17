@@ -4,7 +4,7 @@ Tags: private, notes, content, workflow
 Requires at least: 6.8
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.3.3
+Stable tag: 0.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -21,8 +21,12 @@ Install on a separate, private WordPress site (the "hub").
 * Saving survives bad connections: changes are kept on the device until the server has them.
 * Works on phones and can be added to the Android home screen.
 * Ollama test page to check a local AI model on your PC.
+* Article workspace: note → cleanup → outline → draft → polish → check → SEO → copy to WordPress, with writing settings per website.
 
 == Changelog ==
+
+= 0.4.0 =
+* Article workspace: turn a note into an article in 6 steps with Copy prompt / Paste answer (ChatGPT or Claude), automatic checks, SEO fields, and Copy for WordPress (blocks incl. Blog Kit boxes). Writing settings per website with example articles, style guide and editable prompts.
 
 = 0.3.3 =
 * Safety copies are never removed before their replacement is stored, for every kind of change.

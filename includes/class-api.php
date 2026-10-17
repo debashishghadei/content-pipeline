@@ -80,6 +80,13 @@ final class Api {
 			array( '/folders', 'POST', 'create_folder' ),
 			array( '/folders/' . $id, 'POST', 'update_folder' ),
 			array( '/folders/' . $id, 'DELETE', 'delete_folder' ),
+			array( '/articles', 'POST', 'create', Article_Api::class ),
+			array( '/articles/' . $id, 'GET', 'read', Article_Api::class ),
+			array( '/articles/' . $id, 'POST', 'save', Article_Api::class ),
+			array( '/articles/' . $id, 'DELETE', 'delete', Article_Api::class ),
+			array( '/articles/' . $id . '/restore', 'POST', 'restore', Article_Api::class ),
+			array( '/sites/(?P<id>\d+)', 'GET', 'get_settings', Article_Api::class ),
+			array( '/sites/(?P<id>\d+)', 'POST', 'save_settings', Article_Api::class ),
 		);
 
 		foreach ( $routes as $route ) {
@@ -88,7 +95,7 @@ final class Api {
 				$route[0],
 				array(
 					'methods'             => $route[1],
-					'callback'            => array( __CLASS__, $route[2] ),
+					'callback'            => array( $route[3] ?? __CLASS__, $route[2] ),
 					'permission_callback' => $can,
 				)
 			);
@@ -105,6 +112,7 @@ final class Api {
 			array(
 				'folders'  => Notes::folders(),
 				'notes'    => Notes::all(),
+				'articles' => Articles::all(),
 				'inbox'    => Notes::inbox_id(),
 				'statuses' => Notes::statuses(),
 				'time'     => gmdate( 'c' ),
@@ -389,10 +397,17 @@ final class Api {
 				return strcmp( (string) $b['trashed_at'], (string) $a['trashed_at'] );
 			}
 		);
+		$articles = Articles::all( 'trash' );
+		foreach ( $articles as &$article ) {
+			$trashed_at            = (int) get_post_meta( $article['id'], '_wp_trash_meta_time', true );
+			$article['trashed_at'] = $trashed_at ? gmdate( 'c', $trashed_at ) : null;
+		}
+		unset( $article );
 		return self::no_cache(
 			array(
-				'notes' => $notes,
-				'days'  => $days,
+				'notes'    => $notes,
+				'articles' => $articles,
+				'days'     => $days,
 			)
 		);
 	}
@@ -405,7 +420,7 @@ final class Api {
 	public static function empty_trash() {
 		$ids = get_posts(
 			array(
-				'post_type'      => Notes::POST_TYPE,
+				'post_type'      => array( Notes::POST_TYPE, Articles::POST_TYPE ),
 				'post_status'    => 'trash',
 				'posts_per_page' => -1,
 				'fields'         => 'ids',
@@ -631,6 +646,21 @@ final class Api {
 	}
 
 	/**
+	 * Update a post with the HTML filter paused (text is stored exactly as typed).
+	 *
+	 * @param array $postarr Post fields for wp_update_post().
+	 * @return int|\WP_Error
+	 */
+	public static function save_quietly( array $postarr ) {
+		self::begin_save();
+		try {
+			return wp_update_post( wp_slash( $postarr ), true );
+		} finally {
+			self::end_save();
+		}
+	}
+
+	/**
 	 * Start an app save. Notes are plain text and always shown escaped, so they are
 	 * stored exactly as typed: the HTML filter (kses) is paused, which matters on sites
 	 * where even administrators are filtered (DISALLOW_UNFILTERED_HTML).
@@ -734,7 +764,7 @@ final class Api {
 	 * @param array $data Data.
 	 * @return \WP_REST_Response
 	 */
-	private static function no_cache( array $data ) {
+	public static function no_cache( array $data ) {
 		$response = new \WP_REST_Response( $data );
 		$response->header( 'Cache-Control', 'no-store, private' );
 		return $response;

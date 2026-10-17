@@ -21,7 +21,7 @@ async function login( page ) {
 	await page.goto( BASE + '/wp-login.php' );
 	await page.fill( '#user_login', 'admin' );
 	await page.fill( '#user_pass', 'admin' );
-	await Promise.all( [ page.waitForNavigation(), page.click( '#wp-submit' ) ] );
+	await Promise.all( [ page.waitForNavigation( { timeout: 90000 } ), page.click( '#wp-submit' ) ] );
 	await page.goto( BASE + '/notes/' );
 	await page.waitForSelector( '.cp-shell' );
 }

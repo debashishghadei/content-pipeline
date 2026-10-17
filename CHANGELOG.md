@@ -2,6 +2,21 @@
 
 All notable changes to Content Pipeline Hub. Versions follow semantic versioning (0.x while Phase 1 is built).
 
+## 0.4.0 — 2026-10-17
+
+Phase 2: the article workspace. No AI connection needed: every step builds a prompt you paste into ChatGPT or Claude, and you paste the answer back.
+
+- **Write article** on any note opens the workspace (`#article=ID`). The article is a separate private item linked to its note; one note can have several articles. The note card and editor link to its articles.
+- **7 steps:** 1 Cleanup, 2 Outline (pasted outline is read into editable sections: heading, description, words; move/add/remove; **Approve outline**), 3 Draft (one prompt per approved section, including the sections already written), 4 Polish (optional; Blog Kit boxes as `:::tip … :::`), 5 Check (automatic: length, sections, [NEEDS DETAIL], phrases to avoid, long paragraphs/sentences, repeated words, leftover outline lines, open boxes, SEO lengths, focus keyword; **Mark as ready**), 6 SEO (paste fills title, description, slug, keyword, excerpt; counters; search preview), 7 Copy to WordPress (**Copy for WordPress** as blocks incl. Blog Kit quick answer, takeaways, tip, warning, note, checklist, FAQ, tables; Copy as Markdown; Copy SEO fields; preview; **Mark as published**).
+- **Each step keeps earlier versions** (before a pasted answer, while editing at most every 10 minutes, and from another device): up to 10 per step, Copy / Restore.
+- **The note's status follows the article** when it reaches a new stage (Outline ready → Draft ready → Ready → Published); a status you set back by hand is respected.
+- **Writing settings per website** (folder menu → Website writing settings; Articles → Default writing settings): audience, language, tone, length, allowed boxes, phrases to avoid, up to 8 example articles, style guide (**Create style guide from examples** prompt + Paste answer), and every prompt editable per website with Reset to default. Copy prompt always uses the latest settings.
+- **Articles list** in the sidebar with stage filter; articles in the trash (restore, delete forever, empty trash).
+- **Saving safety as for notes:** article text goes through the same queue (kept on the device until saved, offline, closed tabs, refused saves with Try again / Copy text / Discard); per-article server lock; a save made on an older version of a step is kept as an earlier version, never overwriting.
+- Phone layout: steps as a scrollable row; the new-note button is hidden on article screens.
+- Found and fixed while testing: a background save redrew the settings screen and lost unsaved typing; empty custom prompts were sent as a list, so the first custom prompt was dropped; Copy prompt right after opening could use default settings; the note status was pushed forward again on every article save after being set back by hand.
+- Tests: tests/article-api-tests.sh (49), tests/article-app.js (69, browser), tests/blocks-tests.js (33, converter + validity of every block in the real block editor).
+
 ## 0.3.3 — 2026-10-17
 
 From ChatGPT's review of 0.3.2 (reproduced with a test before fixing).

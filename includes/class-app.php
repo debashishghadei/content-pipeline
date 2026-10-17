@@ -168,9 +168,16 @@ final class App {
 			'version'    => CONTENT_PIPELINE_VERSION,
 			'maxUpload'  => min( Files::MAX_BYTES, (int) wp_max_upload_size() ),
 			'images'     => Files::enabled(),
+			'writing'    => array(
+				'prompts' => Prompts::defaults(),
+				'steps'   => Prompts::steps(),
+				'boxes'   => Prompts::boxes(),
+				'site'    => Sites::defaults(),
+			),
 			'state'      => array(
 				'folders'  => Notes::folders(),
 				'notes'    => Notes::all(),
+				'articles' => Articles::all(),
 				'inbox'    => Notes::inbox_id(),
 				'statuses' => Notes::statuses(),
 			),
@@ -184,7 +191,9 @@ final class App {
 		);
 
 		wp_register_style( 'content-pipeline-app', CONTENT_PIPELINE_URL . 'assets/css/app.css', array(), CONTENT_PIPELINE_VERSION );
-		wp_register_script( 'content-pipeline-app', CONTENT_PIPELINE_URL . 'assets/js/app.js', array(), CONTENT_PIPELINE_VERSION, true );
+		wp_register_script( 'content-pipeline-blocks', CONTENT_PIPELINE_URL . 'assets/js/blocks.js', array(), CONTENT_PIPELINE_VERSION, true );
+		wp_register_script( 'content-pipeline-app', CONTENT_PIPELINE_URL . 'assets/js/app.js', array( 'content-pipeline-blocks' ), CONTENT_PIPELINE_VERSION, true );
+		wp_register_script( 'content-pipeline-article', CONTENT_PIPELINE_URL . 'assets/js/article.js', array( 'content-pipeline-app' ), CONTENT_PIPELINE_VERSION, true );
 
 		require CONTENT_PIPELINE_DIR . 'templates/app.php';
 	}

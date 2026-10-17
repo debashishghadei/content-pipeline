@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Content Pipeline Hub
  * Description:       Private content hub: capture ideas and turn them into articles for your sites. This site is locked to logged-in users.
- * Version:           0.3.3
+ * Version:           0.4.0
  * Requires at least: 6.8
  * Requires PHP:      8.1
  * Author:            Debashish Ghadei
@@ -18,7 +18,7 @@ namespace ContentPipeline;
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CONTENT_PIPELINE_VERSION', '0.3.3' );
+define( 'CONTENT_PIPELINE_VERSION', '0.4.0' );
 define( 'CONTENT_PIPELINE_FILE', __FILE__ );
 define( 'CONTENT_PIPELINE_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CONTENT_PIPELINE_URL', plugin_dir_url( __FILE__ ) );
@@ -32,6 +32,10 @@ require_once CONTENT_PIPELINE_DIR . 'includes/class-notes.php';
 require_once CONTENT_PIPELINE_DIR . 'includes/class-files.php';
 require_once CONTENT_PIPELINE_DIR . 'includes/class-api.php';
 require_once CONTENT_PIPELINE_DIR . 'includes/class-ollama.php';
+require_once CONTENT_PIPELINE_DIR . 'includes/class-prompts.php';
+require_once CONTENT_PIPELINE_DIR . 'includes/class-sites.php';
+require_once CONTENT_PIPELINE_DIR . 'includes/class-articles.php';
+require_once CONTENT_PIPELINE_DIR . 'includes/class-article-api.php';
 
 register_activation_hook( __FILE__, array( Plugin::class, 'activate' ) );
 register_deactivation_hook( __FILE__, array( Plugin::class, 'deactivate' ) );
