@@ -50,6 +50,8 @@ Read this first when starting a new chat (Claude or ChatGPT). Update it at the e
 - Then Phase 3: receiver plugin on each website + "Send as draft" (REST + Application Password, SEO plugin adapters), starting with Madhu Infotech. Later: Ollama inside the buttons, Keep import.
 
 ## Open issues / not tested
+- **OPEN (19 Oct 2026, real site):** on the Madhu Infotech test site (Cloudways, PHP 8.4, object cache enabled from Cloudways, Varnish/Breeze unknown) login became very slow with 0.3.3 active; with the plugin folder renamed, login works. Suspected: object cache vs. per-request option checks (`maybe_flush_rules`, `maybe_seed`) and the direct-SQL lock rows. To do: reproduce with Redis + an object-cache drop-in on the rig, fix, add object-cache tests. (The same day the "AI Provider for OpenAI" plugin also caused white pages with a fatal error: missing class `WordPress\AiClient\...\ListModelsApiBasedProviderAvailability`; not our plugin.)
+- **Rule from now on:** before building or debugging, ask the user for Tools → Site Health → Info → "Copy site info to clipboard" from the target site, plus Cloudways Varnish / object cache / Breeze / CDN on-off, and mirror that stack on the rig.
 - Real Cloudways stack (Nginx + Apache + Varnish, private_html permissions), real Android phone (install to home screen, Back button), real Ollama on the user's PC.
 - Very large note counts: the app loads all notes at start (fine for thousands of short notes).
 - Images cannot be added while offline (by design, D19), and are switched off unless a private folder outside the website exists (D28).
